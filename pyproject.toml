@@ -1,0 +1,20 @@
+[project]
+name = "dgi_compliance"
+version = "1.0.0"
+description = "DGI RDC e-DEF (Facture Normalisée) certification for ERPNext"
+readme = "../README.md"
+license = "MIT"
+authors = [{ name = "Helosystems", email = "contact@helosystems.com" }]
+requires-python = ">=3.10"
+dependencies = [
+    # Frappe ships requests, but we pin a known-good QR lib for the print format.
+    "qrcode>=7.4",
+    "Pillow>=10.0",
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "dgi_compliance"

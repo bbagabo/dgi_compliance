@@ -1,0 +1,54 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-21 09:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series", "action_datetime", "user",
+  "column_break_4", "document_type", "document_no", "pos_code",
+  "outcome_section", "entry_type", "action", "direction",
+  "column_break_10", "http_status", "success", "message_text",
+  "payload_section", "request_json", "response_json",
+  "comments_section", "comments"
+ ],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "label": "Series", "options": "DGI-LOG-.YYYY.-", "default": "DGI-LOG-.YYYY.-", "reqd": 1},
+  {"fieldname": "action_datetime", "fieldtype": "Datetime", "label": "Action Datetime", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "user", "fieldtype": "Link", "label": "User", "options": "User", "in_list_view": 1},
+  {"fieldname": "column_break_4", "fieldtype": "Column Break"},
+  {"fieldname": "document_type", "fieldtype": "Data", "label": "Document Type", "in_list_view": 1},
+  {"fieldname": "document_no", "fieldtype": "Data", "label": "Document No", "in_list_view": 1},
+  {"fieldname": "pos_code", "fieldtype": "Link", "label": "POS Code", "options": "DGI eMCF POS"},
+
+  {"fieldname": "outcome_section", "fieldtype": "Section Break", "label": "Outcome"},
+  {"fieldname": "entry_type", "fieldtype": "Select", "label": "Entry Type", "options": "API Call\nSend Invoice\nCancel Invoice\nStatus Request\nRefresh Master\nHealth Check"},
+  {"fieldname": "action", "fieldtype": "Data", "label": "Action"},
+  {"fieldname": "direction", "fieldtype": "Select", "label": "Direction", "options": "Outbound\nInbound", "default": "Outbound"},
+  {"fieldname": "column_break_10", "fieldtype": "Column Break"},
+  {"fieldname": "http_status", "fieldtype": "Data", "label": "HTTP Status", "in_list_view": 1},
+  {"fieldname": "success", "fieldtype": "Check", "label": "Success", "in_list_view": 1},
+  {"fieldname": "message_text", "fieldtype": "Small Text", "label": "Message"},
+
+  {"fieldname": "payload_section", "fieldtype": "Section Break", "label": "Payload", "collapsible": 1},
+  {"fieldname": "request_json", "fieldtype": "Long Text", "label": "Request JSON"},
+  {"fieldname": "response_json", "fieldtype": "Long Text", "label": "Response JSON"},
+
+  {"fieldname": "comments_section", "fieldtype": "Section Break", "label": "Comments", "collapsible": 1},
+  {"fieldname": "comments", "fieldtype": "Table", "label": "Comments", "options": "DGI Invoice Log Comment"}
+ ],
+ "links": [],
+ "modified": "2026-05-21 09:00:00",
+ "modified_by": "Administrator",
+ "module": "DGI Compliance",
+ "name": "DGI Invoice Log",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1}
+ ],
+ "sort_field": "action_datetime",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

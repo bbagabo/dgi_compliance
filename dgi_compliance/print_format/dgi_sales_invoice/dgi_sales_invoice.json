@@ -1,0 +1,21 @@
+{
+ "align_labels_right": 0,
+ "creation": "2026-05-21 09:00:00",
+ "default_print_language": "fr",
+ "disabled": 0,
+ "doc_type": "Sales Invoice",
+ "doctype": "Print Format",
+ "font": "Default",
+ "format_data": null,
+ "html": "<div class='print-format'>\n  <h3>Facture Normalisée</h3>\n  <p><b>N°:</b> {{ doc.name }}<br>\n     <b>Date:</b> {{ frappe.utils.formatdate(doc.posting_date) }}<br>\n     <b>Client:</b> {{ doc.customer_name }} ({{ doc.dgi_client_type or '—' }})<br>\n     <b>NIF:</b> {{ doc.tax_id or '' }}</p>\n  <table class='table table-bordered'>\n    <thead><tr><th>Code</th><th>Désignation</th><th>Qté</th><th>PU</th><th>Total</th><th>Groupe TVA</th></tr></thead>\n    <tbody>\n    {% for it in doc.items %}\n      <tr><td>{{ it.item_code }}</td><td>{{ it.item_name }}</td><td>{{ it.qty }}</td><td>{{ '%.2f'|format(it.rate) }}</td><td>{{ '%.2f'|format(it.amount) }}</td><td>{{ it.dgi_tax_group }}</td></tr>\n    {% endfor %}\n    </tbody>\n  </table>\n  <p style='margin-top:1em'><b>Total HT:</b> {{ '%.2f'|format(doc.net_total) }} {{ doc.currency }}<br>\n     <b>TVA:</b> {{ '%.2f'|format(doc.total_taxes_and_charges or 0) }} {{ doc.currency }}<br>\n     <b>Total TTC:</b> {{ '%.2f'|format(doc.grand_total) }} {{ doc.currency }}</p>\n  <hr>\n  <div style='display:flex;justify-content:space-between'>\n    <div>\n      <p style='font-size:0.85em'>\n        <b>Code DEF/DGI:</b> {{ doc.dgi_code_def or 'NON CERTIFIÉ' }}<br>\n        <b>UID:</b> {{ doc.dgi_uid or '' }}<br>\n        <b>Compteurs:</b> {{ doc.dgi_counters or '' }}<br>\n        <b>NIM:</b> {{ frappe.db.get_value('DGI eMCF POS', doc.dgi_emcf_pos, 'nim') if doc.dgi_emcf_pos else '' }}\n      </p>\n    </div>\n    <div>\n      {% if doc.dgi_qr_code %}\n        {% set qr_img = frappe.get_attr('dgi_compliance.utils.qr.render_qr_png')(doc.dgi_qr_code) %}\n        <img src=\"{{ qr_img }}\" style='width:120px;height:120px'/>\n      {% endif %}\n    </div>\n  </div>\n</div>",
+ "line_breaks": 0,
+ "modified": "2026-05-21 09:00:00",
+ "modified_by": "Administrator",
+ "module": "DGI Compliance",
+ "name": "DGI Sales Invoice",
+ "owner": "Administrator",
+ "print_format_builder": 0,
+ "print_format_type": "Jinja",
+ "show_section_headings": 0,
+ "standard": "Yes"
+}

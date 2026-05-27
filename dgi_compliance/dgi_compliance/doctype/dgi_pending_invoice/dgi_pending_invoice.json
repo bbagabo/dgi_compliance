@@ -1,0 +1,47 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:DGIP-{####}",
+ "creation": "2026-05-21 09:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "document_type", "document_no", "pos_code",
+  "column_break_4", "document_status", "document_uid", "retry_count",
+  "result_section", "dgi_code", "def_counters", "def_time", "qr_code",
+  "audit_section", "last_attempt", "last_error", "response_blob"
+ ],
+ "fields": [
+  {"fieldname": "document_type", "fieldtype": "Select", "label": "Document Type", "options": "Sales Invoice\nSales Invoice Return", "default": "Sales Invoice", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "document_no", "fieldtype": "Data", "label": "Document No", "in_list_view": 1, "reqd": 1},
+  {"fieldname": "pos_code", "fieldtype": "Link", "label": "POS Code", "options": "DGI eMCF POS", "in_list_view": 1},
+  {"fieldname": "column_break_4", "fieldtype": "Column Break"},
+  {"fieldname": "document_status", "fieldtype": "Select", "label": "Status", "options": "Pending\nSent\nNormalized\nCancelled\nError", "default": "Pending", "in_list_view": 1},
+  {"fieldname": "document_uid", "fieldtype": "Data", "label": "Document UID"},
+  {"fieldname": "retry_count", "fieldtype": "Int", "label": "Retry Count", "default": 0},
+
+  {"fieldname": "result_section", "fieldtype": "Section Break", "label": "DGI Result", "collapsible": 1},
+  {"fieldname": "dgi_code", "fieldtype": "Data", "label": "DEF/DGI Code"},
+  {"fieldname": "def_counters", "fieldtype": "Data", "label": "DEF Counters"},
+  {"fieldname": "def_time", "fieldtype": "Data", "label": "DEF Time"},
+  {"fieldname": "qr_code", "fieldtype": "Small Text", "label": "QR Code"},
+
+  {"fieldname": "audit_section", "fieldtype": "Section Break", "label": "Audit", "collapsible": 1},
+  {"fieldname": "last_attempt", "fieldtype": "Datetime", "label": "Last Attempt"},
+  {"fieldname": "last_error", "fieldtype": "Small Text", "label": "Last Error"},
+  {"fieldname": "response_blob", "fieldtype": "Long Text", "label": "Raw Response"}
+ ],
+ "links": [],
+ "modified": "2026-05-21 09:00:00",
+ "modified_by": "Administrator",
+ "module": "DGI Compliance",
+ "name": "DGI Pending Invoice",
+ "owner": "Administrator",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
