@@ -11,3 +11,9 @@ build/
 .vscode/
 node_modules/
 *.log
+*.toml
+*.md
+*.py
+*.py
+*.py
+*.md
