@@ -1,6 +1,6 @@
-// Desk client script — adds the DGI buttons & status indicators to the
-// Sales Invoice form. Loaded via hooks.py / doctype_js.
-// Safe to call multiple times (Frappe re-runs on every refresh).
+// Desk client script -- adds the DGI buttons & status indicators.
+// Loaded globally via hooks.py (app_include_js). Safe to call multiple
+// times (Frappe re-runs handlers on every form refresh).
 
 frappe.ui.form.on('Sales Invoice', {
     refresh(frm) {
@@ -11,7 +11,7 @@ frappe.ui.form.on('Sales Invoice', {
                     method: 'dgi_compliance.overrides.sales_invoice.manual_certify',
                     args: { sales_invoice: frm.doc.name },
                     freeze: true,
-                    freeze_message: __('Sending invoice to DGI e-DEF…'),
+                    freeze_message: __('Sending invoice to DGI e-DEF...'),
                     callback: (r) => {
                         frm.reload_doc();
                         if (r.message && r.message.status === 'ok') {
@@ -51,7 +51,7 @@ frappe.ui.form.on('Sales Invoice', {
     },
 });
 
-// DGI Settings form — manual reference-data refresh button.
+// DGI Settings form -- manual reference-data refresh button.
 frappe.ui.form.on('DGI Settings', {
     refresh(frm) {
         frm.add_custom_button(__('Refresh Reference Data'), () => {
@@ -86,5 +86,48 @@ frappe.ui.form.on('DGI Settings', {
                 },
             });
         });
+    },
+});
+
+// DGI eMCF POS form -- setup status indicator + manual re-provision button.
+// Provisioning normally runs automatically on save (see DGIeMCFPOS.on_update);
+// this button lets an operator force it after fixing a token.
+frappe.ui.form.on('DGI eMCF POS', {
+    refresh(frm) {
+        if (frm.is_new()) return;
+
+        if (frm.doc.setup_complete) {
+            frm.dashboard.set_headline_alert(
+                __('Setup complete -- token validated and reference data loaded.'),
+                'green',
+            );
+        } else {
+            frm.dashboard.set_headline_alert(
+                __('Setup pending -- fill POS Code, NIM, Active status and Token, then save. Provisioning runs automatically.'),
+                'orange',
+            );
+        }
+
+        frm.add_custom_button(__('Run DGI Setup Now'), () => {
+            frappe.call({
+                method: 'dgi_compliance.api.info.complete_pos_setup',
+                args: { pos_code: frm.doc.name },
+                freeze: true,
+                freeze_message: __('Validating token & loading DGI reference data...'),
+                callback: (r) => {
+                    frm.reload_doc();
+                    const m = r.message || {};
+                    if (m.setup_complete) {
+                        frappe.show_alert({ message: __('POS setup complete'), indicator: 'green' });
+                    } else {
+                        frappe.msgprint({
+                            title: __('Setup not complete'),
+                            message: m.health || __('Check the token and try again.'),
+                            indicator: 'red',
+                        });
+                    }
+                },
+            });
+        }, __('DGI'));
     },
 });

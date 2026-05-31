@@ -1,19 +1,19 @@
 """
-Master-data refresh — pulls dictionaries from DGI and upserts them into
+Master-data refresh -- pulls dictionaries from DGI and upserts them into
 `DGI Reference Data`. Designed to be idempotent: re-running the job never
 duplicates rows, and never removes rows that DGI dropped (we mark them
 inactive instead).
 
 Dictionaries handled:
-    /api/info/itemTypes         → category 'Item Type'
-    /api/info/invoiceTypes      → category 'Invoice Type'
-    /api/info/paymentTypes      → category 'Payment Type'
-    /api/info/clientTypes       → category 'Client Type'
-    /api/info/referenceTypes    → category 'Reference Type'  (credit note reasons)
+    /api/info/itemTypes         -> category 'Item Type'
+    /api/info/invoiceTypes      -> category 'Invoice Type'
+    /api/info/paymentTypes      -> category 'Payment Type'
+    /api/info/clientTypes       -> category 'Client Type'
+    /api/info/referenceTypes    -> category 'Reference Type'  (credit note reasons)
 
 Plus two non-dictionary endpoints we mirror into the same store:
-    /api/info/taxGroups         → category 'Tax Group'   (also seeds DGI Tax Group Mapping)
-    /api/info/currencyRates     → category 'Currency Rate' (Rate stored in extra)
+    /api/info/taxGroups         -> category 'Tax Group'   (also seeds DGI Tax Group Mapping)
+    /api/info/currencyRates     -> category 'Currency Rate' (Rate stored in extra)
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def refresh_reference_data(category: str | None = None,
     # Pick any Active POS for the auth token if not provided.
     pos_code = pos_code or _pick_any_active_pos()
     if not pos_code:
-        frappe.throw("No active DGI POS configured — cannot authenticate.")
+        frappe.throw("No active DGI POS configured -- cannot authenticate.")
 
     counts: dict[str, int] = {}
     categories = [category] if category else list(CATEGORY_TO_PATH)
@@ -141,3 +141,66 @@ def check_pos_token_validity() -> dict:
             frappe.db.set_value("DGI eMCF POS", pos_name, "api_operational", 0)
             out[pos_name] = f"error: {exc}"
     return out
+
+
+@frappe.whitelist()
+def complete_pos_setup(pos_code: str) -> dict:
+    """One-shot auto-provisioning for a fully configured POS.
+
+    Triggered from DGI eMCF POS.on_update (enqueued). Idempotent: re-running
+    simply re-validates and re-pulls. Sets setup_complete = 1 only when the
+    token authenticates successfully against DGI /status.
+
+    Steps:
+      1. Validate the POS token against /status -> api_operational/api_version.
+      2. Pull every reference dictionary using this POS's token.
+      3. Stamp setup_complete + last_setup_check.
+    """
+    if not frappe.db.exists("DGI eMCF POS", pos_code):
+        return {"status": "missing_pos"}
+
+    now = frappe.utils.now_datetime()
+    result: dict = {"pos_code": pos_code}
+
+    # 1) Token / connectivity health check.
+    try:
+        resp = client.get(
+            client.STATUS_PATH,
+            pos_code=pos_code,
+            action="POS Auto-Setup Health Check",
+        )
+        frappe.db.set_value("DGI eMCF POS", pos_code, {
+            "api_operational": 1,
+            "api_version": resp.get("version", ""),
+        })
+        result["health"] = "ok"
+    except client.DGIAPIError as exc:
+        # Token bad / DGI unreachable: leave setup_complete = 0 so the job
+        # re-arms on the next save once the operator fixes the token.
+        frappe.db.set_value("DGI eMCF POS", pos_code, {
+            "api_operational": 0,
+            "last_setup_check": now,
+        })
+        frappe.db.commit()
+        result["health"] = f"error: {exc}"
+        result["setup_complete"] = 0
+        return result
+
+    # 2) Reference data pull (best-effort; a failure must not block setup).
+    try:
+        result["reference_data"] = refresh_reference_data(pos_code=pos_code)
+    except Exception:  # noqa: BLE001
+        frappe.log_error(
+            title=f"DGI auto-setup reference pull failed for {pos_code}",
+            message=frappe.get_traceback(),
+        )
+        result["reference_data"] = "skipped"
+
+    # 3) Mark complete.
+    frappe.db.set_value("DGI eMCF POS", pos_code, {
+        "setup_complete": 1,
+        "last_setup_check": now,
+    })
+    frappe.db.commit()
+    result["setup_complete"] = 1
+    return result

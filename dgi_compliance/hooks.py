@@ -14,7 +14,7 @@ from . import __version__ as app_version  # noqa: F401
 
 app_name = "dgi_compliance"
 app_title = "DGI Compliance"
-app_publisher = "Helosystems"
+app_publisher = "HeloSystems"
 app_description = "DGI RDC e-DEF (Facture Normalisée) certification for ERPNext"
 app_email = "contact@helosystems.com"
 app_license = "MIT"

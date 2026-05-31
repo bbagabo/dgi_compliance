@@ -2,7 +2,7 @@
 Build the JSON body the DGI /api/invoice endpoint expects.
 
 The exact field names align with the patterns observed in the Business
-Central reference implementation (Promasidor DGI Exchange Module v1.0.0.0)
+Central reference implementation (HeloSystems DGI Exchange Module v1.0.0.0)
 and the DGI e-DEF public documentation. Adjust here — and only here — if
 the DGI publishes a new spec; the rest of the code is decoupled.
 """

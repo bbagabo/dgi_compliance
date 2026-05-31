@@ -5,3 +5,4 @@ dgi_compliance.patches.v1_0.create_default_settings
 dgi_compliance.patches.v1_0.add_custom_fields
 dgi_compliance.patches.v1_0.seed_reference_data
 dgi_compliance.patches.v1_0.backfill_dgi_status
+dgi_compliance.patches.v1_1.widen_token_and_pos_fields

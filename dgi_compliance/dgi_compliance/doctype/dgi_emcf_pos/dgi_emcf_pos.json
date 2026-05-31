@@ -9,7 +9,7 @@
   "pos_code", "nim", "description", "status",
   "column_break_5", "warehouse", "pos_profile",
   "auth_section", "token", "token_valid_till",
-  "column_break_10", "api_operational", "api_version",
+  "column_break_10", "api_operational", "api_version", "setup_complete", "last_setup_check",
   "address_section", "address_1", "address_2", "address_3",
   "column_break_15", "contact_1", "contact_2", "contact_3"
  ],
@@ -23,11 +23,13 @@
   {"fieldname": "pos_profile", "fieldtype": "Link", "label": "POS Profile", "options": "POS Profile"},
 
   {"fieldname": "auth_section", "fieldtype": "Section Break", "label": "Authentication"},
-  {"fieldname": "token", "fieldtype": "Password", "label": "Bearer Token"},
+  {"fieldname": "token", "fieldtype": "Password", "label": "Bearer Token", "length": 500, "description": "Per-POS DGI e-DEF JWT. Up to 500 characters."},
   {"fieldname": "token_valid_till", "fieldtype": "Datetime", "label": "Token Valid Till"},
   {"fieldname": "column_break_10", "fieldtype": "Column Break"},
   {"fieldname": "api_operational", "fieldtype": "Check", "label": "API Operational", "read_only": 1},
   {"fieldname": "api_version", "fieldtype": "Data", "label": "API Version", "read_only": 1},
+  {"fieldname": "setup_complete", "fieldtype": "Check", "label": "Setup Complete", "read_only": 1, "description": "Set automatically once POS Code, NIM, Active status and Token are all present and the token passes a /status health check."},
+  {"fieldname": "last_setup_check", "fieldtype": "Datetime", "label": "Last Setup Check", "read_only": 1},
 
   {"fieldname": "address_section", "fieldtype": "Section Break", "label": "Address & Contact"},
   {"fieldname": "address_1", "fieldtype": "Data", "label": "Address 1"},
@@ -39,7 +41,7 @@
   {"fieldname": "contact_3", "fieldtype": "Data", "label": "Contact 3"}
  ],
  "links": [],
- "modified": "2026-05-21 09:00:00",
+ "modified": "2026-05-30 09:00:00",
  "modified_by": "Administrator",
  "module": "DGI Compliance",
  "name": "DGI eMCF POS",

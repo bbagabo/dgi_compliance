@@ -1,6 +1,6 @@
 [project]
 name = "dgi_compliance"
-version = "1.0.0"
+version = "1.1.0"
 description = "DGI RDC e-DEF (Facture Normalisée) certification for ERPNext"
 readme = "README.md"
 license = "MIT"
