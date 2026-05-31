@@ -17,7 +17,7 @@ Design notes
 
 The endpoints, the URL shape, and the token-per-POS pattern are mined from
 the existing Microsoft Dynamics 365 BC module
-(`Inventivus_Promasidor DGI Exchange Module 1.0.0.0`).
+(`HeloSystems DGI Exchange Module 1.0.0.0`).
 """
 
 from __future__ import annotations
