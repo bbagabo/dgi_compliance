@@ -1,0 +1,37 @@
+{
+ "doctype": "DocType", "name": "DGI Compliance Settings", "module": "DGI Compliance",
+ "issingle": 1, "custom": 0, "engine": "InnoDB", "track_changes": 1,
+ "fields": [
+  {"fieldname": "enabled", "label": "Enabled", "fieldtype": "Check", "default": "0"},
+  {"fieldname": "environment", "label": "Environment", "fieldtype": "Select", "options": "Test\nProduction", "default": "Test", "reqd": 1},
+  {"fieldname": "base_url_test", "label": "Base URL (Test)", "fieldtype": "Data", "default": "https://developper.dgirdc.cd/edef"},
+  {"fieldname": "base_url_production", "label": "Base URL (Production)", "fieldtype": "Data", "default": "https://edef.dgirdc.cd"},
+  {"fieldname": "token", "label": "e-DEF JWT Token", "fieldtype": "Password", "description": "Issued by the e-MCF management portal (not via an API login)."},
+  {"fieldname": "request_timeout", "label": "Request Timeout (s)", "fieldtype": "Int", "default": "15"},
+  {"fieldname": "cb_1", "fieldtype": "Column Break"},
+  {"fieldname": "default_nif", "label": "Seller NIF (default)", "fieldtype": "Data", "description": "If empty, taken from Company.tax_id"},
+  {"fieldname": "isf", "label": "ISF (AAA-BBB-NN)", "fieldtype": "Data"},
+  {"fieldname": "default_invoice_type", "label": "Default Invoice Type", "fieldtype": "Select", "options": "FV\nFT\nFA\nEV\nET\nEA", "default": "FV"},
+  {"fieldname": "price_mode", "label": "Price Mode", "fieldtype": "Select", "options": "ttc\nht", "default": "ttc"},
+  {"fieldname": "auto_normalize", "label": "Auto-normalize on Submit", "fieldtype": "Check", "default": "1", "description": "If off, only creates the pending request (no confirm)."},
+  {"fieldname": "token_valid_until", "label": "Token Valid Until", "fieldtype": "Datetime", "read_only": 1, "description": "Refreshed by the scheduler from /api/info/status"},
+
+  {"fieldname": "sb_token", "label": "Token Monitoring", "fieldtype": "Section Break"},
+  {"fieldname": "check_frequency", "label": "Check Frequency", "fieldtype": "Select", "options": "Daily\nWeekly\nMonthly", "default": "Daily"},
+  {"fieldname": "check_weekday", "label": "Weekday (if Weekly)", "fieldtype": "Select", "options": "Monday\nTuesday\nWednesday\nThursday\nFriday\nSaturday\nSunday", "default": "Monday"},
+  {"fieldname": "check_day_of_month", "label": "Day of Month (if Monthly)", "fieldtype": "Int", "default": "1", "description": "1-28"},
+  {"fieldname": "cb_2", "fieldtype": "Column Break"},
+  {"fieldname": "warn_days_before", "label": "Warn N Days Before Expiry", "fieldtype": "Int", "default": "7"},
+  {"fieldname": "notify_recipients", "label": "Notify Recipients (comma-separated emails)", "fieldtype": "Small Text"},
+
+  {"fieldname": "sb_map", "label": "Mappings", "fieldtype": "Section Break"},
+  {"fieldname": "default_payment_type", "label": "Default Payment Type", "fieldtype": "Select", "options": "ESPECES\nVIREMENT\nCARTEBANCAIRE\nMOBILEMONEY\nCHEQUES\nCREDIT\nAUTRE", "default": "ESPECES"},
+  {"fieldname": "payment_mode_map", "label": "Payment Mode Mapping", "fieldtype": "Table", "options": "DGI Payment Mode Map"},
+  {"fieldname": "default_tax_group", "label": "Default Tax Group (A-P)", "fieldtype": "Select", "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP", "default": "A"},
+  {"fieldname": "tax_group_map", "label": "Tax Group Mapping", "fieldtype": "Table", "options": "DGI Tax Group Map"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "submit": 0, "cancel": 0, "share": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1}
+ ]
+}

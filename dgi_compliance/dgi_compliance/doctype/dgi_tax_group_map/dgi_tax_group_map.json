@@ -1,0 +1,10 @@
+{
+ "doctype": "DocType", "name": "DGI Tax Group Map", "module": "DGI Compliance",
+ "istable": 1, "custom": 0, "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "item_tax_template", "label": "Item Tax Template", "fieldtype": "Link", "options": "Item Tax Template", "in_list_view": 1, "columns": 4},
+  {"fieldname": "tax_rate", "label": "Tax Rate (%)", "fieldtype": "Float", "in_list_view": 1, "columns": 3, "description": "Used when no template matches"},
+  {"fieldname": "edef_tax_group", "label": "e-DEF Tax Group (A-P)", "fieldtype": "Select", "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP", "in_list_view": 1, "columns": 3, "reqd": 1}
+ ],
+ "permissions": []
+}

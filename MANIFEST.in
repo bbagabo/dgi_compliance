@@ -1,2 +1,0 @@
-include README.md license.txt
-recursive-include dgi_compliance *.py *.js *.css *.json *.txt *.md *.html
