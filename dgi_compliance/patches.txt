@@ -1,1 +1,3 @@
-# version 1.1.0
+[post_model_sync]
+dgi_compliance.patches.v1_2.seed_static_catalogs
+dgi_compliance.patches.v2_0.seed_mapping_and_matrix

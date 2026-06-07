@@ -1,0 +1,9 @@
+{
+ "doctype": "DocType", "name": "DGI VAT Account", "module": "DGI Compliance",
+ "istable": 1, "custom": 0, "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "account_head", "label": "VAT Account (tax head)", "fieldtype": "Link", "options": "Account", "in_list_view": 1, "columns": 6, "reqd": 1},
+  {"fieldname": "company", "label": "Company", "fieldtype": "Link", "options": "Company", "in_list_view": 1, "columns": 4}
+ ],
+ "permissions": []
+}

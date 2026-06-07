@@ -1,0 +1,40 @@
+{
+ "doctype": "DocType", "name": "DGI Validation Matrix", "module": "DGI Compliance",
+ "custom": 0, "engine": "InnoDB", "autoname": "hash", "track_changes": 1,
+ "fields": [
+  {"fieldname": "matrix_type", "label": "Matrice", "fieldtype": "Select", "reqd": 1, "in_list_view": 1,
+   "options": "C - Invoice Type / VAT Group / Country\nD - Item Type / Tax Group\nE - Prepayment / Item Type\nF - Credit Nature / Item Type",
+   "description": "Choisit la combinaison de regles. Les colonnes pertinentes s'affichent en dessous."},
+  {"fieldname": "status", "label": "Statut", "fieldtype": "Select", "options": "Allow\nBlocked", "reqd": 1, "default": "Allow", "in_list_view": 1,
+   "description": "Allow = combinaison autorisee; Blocked = combinaison interdite."},
+  {"fieldname": "enforcement", "label": "Application", "fieldtype": "Select", "options": "Block\nWarn", "default": "Block", "in_list_view": 1,
+   "description": "Block = empeche l'enregistrement; Warn = avertit seulement."},
+  {"fieldname": "is_active", "label": "Actif", "fieldtype": "Check", "default": "1", "in_list_view": 1},
+  {"fieldname": "cb_1", "fieldtype": "Column Break"},
+  {"fieldname": "priority", "label": "Priorite", "fieldtype": "Int", "default": "0", "description": "Les lignes de priorite plus elevee l'emportent en cas de chevauchement (plus grand = prioritaire)."},
+
+  {"fieldname": "sb_dims", "label": "Dimensions", "fieldtype": "Section Break"},
+  {"fieldname": "invoice_type", "label": "Type de facture", "fieldtype": "Select", "options": "Any\nFV\nFT\nFA\nEV\nET\nEA", "default": "Any", "in_list_view": 1,
+   "depends_on": "eval:['C - Invoice Type / VAT Group / Country','E - Prepayment / Item Type'].includes(doc.matrix_type)"},
+  {"fieldname": "vat_group", "label": "Groupe TVA", "fieldtype": "Select", "options": "Any\nLOC\nFOR", "default": "Any", "in_list_view": 1,
+   "depends_on": "eval:doc.matrix_type=='C - Invoice Type / VAT Group / Country'"},
+  {"fieldname": "country_scope", "label": "Pays", "fieldtype": "Select", "options": "Any\nCD\nNon-CD", "default": "Any", "in_list_view": 1,
+   "depends_on": "eval:doc.matrix_type=='C - Invoice Type / VAT Group / Country'"},
+  {"fieldname": "cb_2", "fieldtype": "Column Break"},
+  {"fieldname": "item_type", "label": "Type d'article", "fieldtype": "Select", "options": "All\nBIE\nSER\nTAX", "default": "All", "in_list_view": 1,
+   "depends_on": "eval:['D - Item Type / Tax Group','E - Prepayment / Item Type','F - Credit Nature / Item Type'].includes(doc.matrix_type)"},
+  {"fieldname": "tax_group", "label": "Groupe de taxe", "fieldtype": "Select", "options": "Any\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP", "default": "Any",
+   "depends_on": "eval:doc.matrix_type=='D - Item Type / Tax Group'"},
+  {"fieldname": "credit_nature", "label": "Nature de l'avoir", "fieldtype": "Select", "options": "Any\nCOR\nRAN\nRAM\nRRR", "default": "Any",
+   "depends_on": "eval:doc.matrix_type=='F - Credit Nature / Item Type'"},
+
+  {"fieldname": "sb_msg", "label": "Message", "fieldtype": "Section Break"},
+  {"fieldname": "message", "label": "Message d'erreur (override)", "fieldtype": "Small Text", "description": "Optionnel: message affiche a l'utilisateur quand cette regle bloque/averti. Si vide, un message standard est genere."},
+  {"fieldname": "notes", "label": "Notes", "fieldtype": "Small Text"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts User", "read": 1}
+ ]
+}

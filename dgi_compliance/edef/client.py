@@ -5,11 +5,21 @@ import frappe
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 
 
-def _headers(token: str) -> dict:
+def _auth_value(scheme: str, token: str) -> str:
+    # Some e-DEF deployments accept the raw token without the "Bearer " prefix.
+    # Configurable in Settings -> auth_scheme ("Bearer" | "None").
+    if (scheme or "Bearer").strip().lower() in ("none", "raw", ""):
+        return token
+    return f"Bearer {token}"
+
+
+def _headers(token: str, scheme: str) -> dict:
     return {
-        "Authorization": f"Bearer {token}",
+        "Authorization": _auth_value(scheme, token),
         "Content-Type": "application/json",
         "Accept": "application/json",
+        # Avoid brotli (content-encoding: br) so we never need the optional brotli package.
+        "Accept-Encoding": "gzip, deflate",
     }
 
 
@@ -17,11 +27,12 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
     s = get_settings()
     base = s.base_url()
     token = s.get_token()
+    scheme = getattr(s, "auth_scheme", "Bearer")
     url = f"{base}{path}"
     timeout = int(s.request_timeout or 15)
     try:
         resp = requests.request(
-            method, url, headers=_headers(token),
+            method, url, headers=_headers(token, scheme),
             data=json.dumps(body) if body is not None else None,
             timeout=timeout,
         )
@@ -37,6 +48,34 @@ def call(method: str, path: str, body: dict | None = None) -> dict:
 # Information API
 def info_status() -> dict:
     return call("GET", "/api/info/status")
+
+
+def tax_groups() -> dict:
+    return call("GET", "/api/info/taxGroups")
+
+
+def invoice_types() -> dict:
+    return call("GET", "/api/info/invoiceTypes")
+
+
+def payment_types() -> dict:
+    return call("GET", "/api/info/paymentTypes")
+
+
+def client_types() -> dict:
+    return call("GET", "/api/info/clientTypes")
+
+
+def reference_types() -> dict:
+    return call("GET", "/api/info/referenceTypes")
+
+
+def item_types() -> dict:
+    return call("GET", "/api/info/itemTypes")
+
+
+def currency_rates() -> dict:
+    return call("GET", "/api/info/currencyRates")
 
 
 # Billing API

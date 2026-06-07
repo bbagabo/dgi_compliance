@@ -1,13 +1,12 @@
 [project]
 name = "dgi_compliance"
-version = "1.1.1"
+version = "1.4.0"
 description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe custom app)"
 authors = [{ name = "DGI Compliance" }]
 requires-python = ">=3.10"
 readme = "README.md"
-dependencies = ["requests>=2.28"]
+dependencies = ["requests>=2.28", "qrcode[pil]>=7.4"]
 
-# Frappe Cloud reads this to confirm the app is compatible with your bench (ERPNext v16 -> frappe v16).
 [tool.bench.frappe-dependencies]
 frappe = ">=16.0.0,<17.0.0"
 erpnext = ">=16.0.0,<17.0.0"

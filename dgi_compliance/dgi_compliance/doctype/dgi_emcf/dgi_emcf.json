@@ -1,0 +1,25 @@
+{
+ "doctype": "DocType", "name": "DGI EMCF", "module": "DGI Compliance",
+ "custom": 0, "engine": "InnoDB", "autoname": "field:nim", "track_changes": 1,
+ "title_field": "shop_name",
+ "fields": [
+  {"fieldname": "nim", "label": "NIM (e-MCF ID)", "fieldtype": "Data", "unique": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "shop_name", "label": "Point de vente", "fieldtype": "Data", "in_list_view": 1},
+  {"fieldname": "emcf_status", "label": "Statut", "fieldtype": "Data", "in_list_view": 1},
+  {"fieldname": "cb_1", "fieldtype": "Column Break"},
+  {"fieldname": "last_synced", "label": "Derniere synchro", "fieldtype": "Datetime", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sb_addr", "label": "Adresse & Contacts", "fieldtype": "Section Break"},
+  {"fieldname": "address1", "label": "Rue (address1)", "fieldtype": "Data"},
+  {"fieldname": "address2", "label": "Emplacement (address2)", "fieldtype": "Data"},
+  {"fieldname": "address3", "label": "Ville (address3)", "fieldtype": "Data"},
+  {"fieldname": "cb_2", "fieldtype": "Column Break"},
+  {"fieldname": "contact1", "label": "Telephone (contact1)", "fieldtype": "Data"},
+  {"fieldname": "contact2", "label": "E-mail (contact2)", "fieldtype": "Data"},
+  {"fieldname": "contact3", "label": "Contact suppl. (contact3)", "fieldtype": "Data"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1},
+  {"role": "Accounts User", "read": 1}
+ ]
+}

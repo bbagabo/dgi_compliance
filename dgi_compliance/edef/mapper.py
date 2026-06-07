@@ -1,43 +1,55 @@
 """Map a real ERPNext v16 Sales Invoice to the e-DEF InvoiceRequestDataDto.
 
-Field references are the standard ERPNext schema (no core change required):
-  Sales Invoice: name, company, customer, customer_name, tax_id, contact_email,
-                 contact_mobile, address_display, currency, conversion_rate,
-                 posting_date, posting_time, is_return, return_against, is_pos, owner
-  Sales Invoice Item (child .items): item_code, item_name, description, qty, rate,
-                 net_rate, item_tax_template, uom
-  Sales Invoice Payment (child .payments, POS only): mode_of_payment, amount
+IMPORTANT — currency: ALL figures sent to the e-DEF API are in LCY = CDF (company/base currency),
+even when the invoice is issued in USD. We send base_* amounts (CDF) for prices/payments and pass
+curCode/curRate so the DGI can display an indicative foreign-currency total on its side.
+
+Field references (standard ERPNext, no core change):
+  Sales Invoice: name, company, customer, customer_name, tax_id, contact_email, contact_mobile,
+                 address_display, currency, conversion_rate, posting_date, posting_time,
+                 is_return, return_against, owner
+  Sales Invoice Item (.items): item_code, item_name, description, qty, base_rate, base_net_rate,
+                 item_tax_template
+  Sales Invoice Payment (.payments, POS): mode_of_payment, base_amount
 """
 import frappe
-from frappe.utils import get_datetime, getdate
+from frappe.utils import get_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 
 INVOICE_TYPES = ("FV", "FT", "FA", "EV", "ET", "EA")
 TAX_GROUPS = set("ABCDEFGHIJKLMNOP")
 
 
-def _seller_nif(doc, settings) -> str | None:
+def _seller_nif(doc, settings):
     if settings.default_nif:
         return settings.default_nif
     return frappe.db.get_value("Company", doc.company, "tax_id")
 
 
-def _price_mode(doc, settings) -> str:
-    # 'ttc' if any tax is inclusive in the unit price, else 'ht'; fall back to setting.
+def _seller_isf(doc, settings):
+    """Prefer the company's ISF custom field, then the global Settings value."""
+    company_isf = frappe.db.get_value("Company", doc.company, "dgi_isf_number")
+    return company_isf or settings.isf
+
+
+def _price_mode(doc, settings):
     for t in (doc.get("taxes") or []):
         if getattr(t, "included_in_print_rate", 0):
             return "ttc"
     return settings.price_mode or "ttc"
 
 
-def _item_rate(it, mode: str) -> float:
-    # When prices are HT, ERPNext's net_rate is the pre-tax unit price; otherwise use rate.
-    if mode == "ht" and it.get("net_rate"):
-        return float(it.net_rate)
-    return float(it.rate or 0)
+def _item_rate_cdf(it, mode):
+    # Always CDF (base currency). Use base_net_rate for HT, else base_rate.
+    if mode == "ht" and it.get("base_net_rate"):
+        return float(it.base_net_rate)
+    return float(it.get("base_rate") or it.get("base_net_rate") or 0)
 
 
-def _invoice_type(doc, settings) -> str:
+def _invoice_type(doc, settings):
+    # Explicit classification on the invoice wins (Link -> DGI Invoice Type, name == code).
+    if doc.get("dgi_invoice_type"):
+        return doc.get("dgi_invoice_type")
     if doc.get("is_return"):
         return "EA" if doc.get("custom_dgi_export") else "FA"
     if doc.get("custom_dgi_export"):
@@ -50,9 +62,7 @@ def _client(doc):
     nif = doc.get("tax_id")
     if not name and not nif:
         return None
-    address = doc.get("address_display") or ""
-    # address_display is HTML; flatten to a single line
-    address = frappe.utils.strip_html(address).replace("\n", ", ").strip(", ").strip()
+    address = frappe.utils.strip_html(doc.get("address_display") or "").replace("\n", ", ").strip(", ").strip()
     return {
         "nif": nif or None,
         "name": name or None,
@@ -64,27 +74,33 @@ def _client(doc):
 def _payments(doc, settings):
     rows = doc.get("payments") or []
     if not rows:
-        return None  # e-MCF defaults to ESPECES
-    out = []
-    for p in rows:
-        out.append({
-            "name": settings.payment_type_for(p.mode_of_payment),
-            "amount": float(p.amount or 0),
-        })
-    return out
+        return None
+    return [{
+        "name": settings.payment_type_for(p.mode_of_payment),
+        "amount": float(p.base_amount or 0),  # CDF
+    } for p in rows]
+
+
+def _item_edef_type(item_code):
+    """Prefer the explicit DGI Item Type on the Item; fall back to the stock-item heuristic."""
+    if not item_code:
+        return "BIE"
+    explicit = frappe.db.get_value("Item", item_code, "dgi_item_type")
+    if explicit:
+        return explicit
+    return "SER" if frappe.db.get_value("Item", item_code, "is_stock_item") == 0 else "BIE"
 
 
 def _items(doc, settings, mode):
     out = []
     for it in (doc.get("items") or []):
-        rate_for_lookup = None
         out.append({
             "code": it.get("item_code") or None,
             "name": it.get("item_name") or it.get("description") or "ARTICLE",
-            "type": "SER" if frappe.db.get_value("Item", it.get("item_code"), "is_stock_item") == 0 else "BIE",
-            "price": _item_rate(it, mode),
+            "type": _item_edef_type(it.get("item_code")),
+            "price": _item_rate_cdf(it, mode),
             "quantity": float(it.qty or 0),
-            "taxGroup": settings.tax_group_for(it.get("item_tax_template"), rate_for_lookup),
+            "taxGroup": settings.tax_group_for(it.get("item_tax_template"), None),
         })
     return out
 
@@ -92,6 +108,7 @@ def _items(doc, settings, mode):
 def _currency_block(doc, dto):
     company_ccy = frappe.get_cached_value("Company", doc.company, "default_currency")
     ccy = doc.get("currency")
+    # Amounts are already CDF; curCode/curRate let the DGI display the indicative foreign total.
     if ccy and ccy not in (company_ccy, "CDF"):
         dto["curCode"] = ccy
         dto["curRate"] = float(doc.get("conversion_rate") or 0)
@@ -99,14 +116,14 @@ def _currency_block(doc, dto):
         dto["curDate"] = dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def build_invoice_request(doc) -> dict:
+def build_invoice_request(doc):
     settings = get_settings()
     mode = _price_mode(doc, settings)
     dto = {
         "nif": _seller_nif(doc, settings),
         "rn": doc.name,
         "mode": mode,
-        "isf": settings.isf,
+        "isf": _seller_isf(doc, settings),
         "type": _invoice_type(doc, settings),
         "items": _items(doc, settings, mode),
         "operator": {"id": None, "name": (doc.get("owner") or "SYSTEM")[:60]},
@@ -117,7 +134,6 @@ def build_invoice_request(doc) -> dict:
     payments = _payments(doc, settings)
     if payments:
         dto["payment"] = payments
-    # Credit note (avoir): reference = Code DEF/DGI of the original invoice (24 chars)
     if dto["type"] in ("FA", "EA"):
         ref_code = None
         if doc.get("return_against"):
@@ -129,7 +145,7 @@ def build_invoice_request(doc) -> dict:
     return dto
 
 
-def validate_invoice_request(dto: dict) -> list[str]:
+def validate_invoice_request(dto):
     import re
     errors = []
     if not dto.get("nif"):
@@ -137,7 +153,7 @@ def validate_invoice_request(dto: dict) -> list[str]:
     if not dto.get("isf") or not re.match(r"^[A-Za-z]{3}-[A-Za-z]{3}-\d{2}$", dto.get("isf") or ""):
         errors.append("isf doit respecter le format AAA-BBB-NN")
     if dto.get("mode") not in ("ttc", "ht"):
-        errors.append("mode doit être 'ttc' ou 'ht'")
+        errors.append("mode doit etre 'ttc' ou 'ht'")
     if dto.get("type") not in INVOICE_TYPES:
         errors.append(f"type invalide ({dto.get('type')})")
     items = dto.get("items") or []
@@ -151,7 +167,7 @@ def validate_invoice_request(dto: dict) -> list[str]:
         if not (it.get("price", -1) >= 0):
             errors.append(f"items[{i}].price invalide")
         if not (it.get("quantity", 0) > 0):
-            errors.append(f"items[{i}].quantity doit être > 0")
+            errors.append(f"items[{i}].quantity doit etre > 0")
     if not (dto.get("operator") or {}).get("name"):
         errors.append("operator.name manquant")
     if dto.get("type") in ("FA", "EA") and not dto.get("reference"):
