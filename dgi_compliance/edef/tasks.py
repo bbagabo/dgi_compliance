@@ -8,6 +8,7 @@ from dgi_compliance.edef.mapper import build_invoice_request, validate_invoice_r
 from dgi_compliance.edef.rounding import doc_vat_base
 from dgi_compliance.edef.qr import make_qr_data_uri
 from dgi_compliance.edef.audit import log_exchange
+from dgi_compliance.edef.util import to_db_datetime
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -199,10 +200,10 @@ def check_token_expiry():
     token_valid = data.get("tokenValid")
     if token_valid:
         try:
-            frappe.db.set_value("DGI Compliance Settings", None, "token_valid_until", token_valid)
+            frappe.db.set_value("DGI Compliance Settings", None, "token_valid_until", to_db_datetime(token_valid))
         except Exception:
             pass
-        days_left = date_diff(getdate(get_datetime(token_valid)), getdate(nowdate()))
+        days_left = date_diff(getdate(to_db_datetime(token_valid) or nowdate()), getdate(nowdate()))
         if days_left <= int(settings.warn_days_before or 7):
             _notify(settings, f"Jeton e-DEF expire dans {days_left} jour(s)",
                     f"Le jeton e-DEF (env. {settings.environment}) expire le {token_valid}. "

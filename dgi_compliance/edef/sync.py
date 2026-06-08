@@ -11,6 +11,7 @@ import frappe
 from frappe.utils import now_datetime, nowdate, getdate
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef import client
+from dgi_compliance.edef.util import to_db_datetime
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -53,7 +54,7 @@ def _upsert_ref(category, code, description=None, value=None, value_date=None):
         "code": str(code),
         "description": description,
         "value": value,
-        "value_date": value_date,
+        "value_date": to_db_datetime(value_date),
         "last_synced": now_datetime(),
     }
     if frappe.db.exists("DGI Reference Value", name):
@@ -155,7 +156,7 @@ def sync_all() -> dict:
             _upsert_pos_from_emcf(r)
         if data.get("tokenValid"):
             try:
-                frappe.db.set_value("DGI Compliance Settings", None, "token_valid_until", data["tokenValid"])
+                frappe.db.set_value("DGI Compliance Settings", None, "token_valid_until", to_db_datetime(data["tokenValid"]))
             except Exception:
                 pass
     else:
@@ -298,3 +299,26 @@ def scheduled_sync():
     summary = sync_all()
     if summary.get("errors"):
         frappe.log_error(title="[DGI] Sync referentiels - erreurs", message=frappe.as_json(summary))
+
+
+@frappe.whitelist()
+def test_connection() -> dict:
+    """Live connectivity check against /api/info/status. Used by the 'Tester la connexion' button."""
+    frappe.only_for(["System Manager", "Accounts Manager"])
+    settings = get_settings()
+    if not settings.get_token():
+        frappe.throw("Aucun jeton e-DEF configure dans DGI Compliance Settings.")
+    res = client.info_status()
+    data = res.get("data") if isinstance(res.get("data"), dict) else {}
+    return {
+        "ok": bool(res.get("ok")),
+        "status_code": res.get("status"),
+        "service_status": data.get("status"),
+        "nif": data.get("nif"),
+        "nim": data.get("nim"),
+        "version": data.get("version"),
+        "tokenValid": data.get("tokenValid"),
+        "serverDateTime": data.get("serverDateTime"),
+        "pos_count": len(data.get("emcfList") or []),
+        "error": res.get("error"),
+    }

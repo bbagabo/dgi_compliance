@@ -84,3 +84,13 @@ dgi_compliance.patches.v2_0.seed_mapping_and_matrix
 
 Also aligned the version string to `2.0.0` in `__init__.py` and `pyproject.toml`
 (previously `1.4.0`) so it matches `hooks.py`.
+
+## Hotfix 2.0.1 - reference sync datetime + per-catalog buttons
+
+- Fixed `MySQLdb.OperationalError 1292 Incorrect datetime value` when refreshing reference data.
+  The e-DEF API returns timezone-aware ISO-8601 timestamps (e.g. `2026-06-08T16:04:42+01:00`,
+  `tokenValid: ...Z`) which MariaDB `DATETIME` columns reject. New helper `edef.util.to_db_datetime`
+  normalises them to `YYYY-MM-DD HH:MM:SS`; applied to currency-rate `value_date` and `tokenValid`.
+- DGI Compliance Settings now has **individual update buttons**: MAJ Points de vente, Types d'article,
+  Types de client, Types de facture, Groupes de taxe - plus **Tester la connexion DGI** (live
+  `/api/info/status` check) and the existing Synchroniser TOUT / Purger les logs.
