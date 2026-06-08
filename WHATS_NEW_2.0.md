@@ -61,3 +61,26 @@ bench build && bench restart
 
 Insert-only seeding preserves existing data. See the v2.0 **Implementation**, **Setup**,
 **Configuration**, and **Maintenance & Debugging** guides, and the rewritten **FRD**.
+
+## Hotfix (2.0.0) - migration on Frappe v16
+
+Fixed a fatal `bench migrate` error on newer Frappe builds:
+
+```
+frappe.exceptions.ValidationError: Patch type PatchType.pre_model_sync not found in patches.txt
+```
+
+Newer Frappe parses `patches.txt` with a ConfigParser that requires **both** section
+headers. `patches.txt` now declares an (empty) `[pre_model_sync]` section in addition to
+`[post_model_sync]`:
+
+```
+[pre_model_sync]
+
+[post_model_sync]
+dgi_compliance.patches.v1_2.seed_static_catalogs
+dgi_compliance.patches.v2_0.seed_mapping_and_matrix
+```
+
+Also aligned the version string to `2.0.0` in `__init__.py` and `pyproject.toml`
+(previously `1.4.0`) so it matches `hooks.py`.
