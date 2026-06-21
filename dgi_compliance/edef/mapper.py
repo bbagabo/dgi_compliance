@@ -27,9 +27,9 @@ def _seller_nif(doc, settings):
 
 
 def _seller_isf(doc, settings):
-    """Prefer the company's ISF custom field, then the global Settings value."""
-    company_isf = frappe.db.get_value("Company", doc.company, "dgi_isf_number")
-    return company_isf or settings.isf
+    """ISF is defined ONLY in DGI Compliance Settings (single source of truth, applied to every
+    invoice type). No per-invoice or per-company override, to avoid divergences."""
+    return settings.isf
 
 
 def _price_mode(doc, settings):
@@ -47,7 +47,14 @@ def _item_rate_cdf(it, mode):
 
 
 def _invoice_type(doc, settings):
-    # Explicit classification on the invoice wins (Link -> DGI Invoice Type, name == code).
+    """Resolve the e-DEF invoice type.
+
+    Rules (v3.0):
+      * Explicit "Type de facture DGI" on the invoice wins -> lets the user pick FT/ET (acompte).
+      * Returns / credit notes auto-resolve to FA (or EA for export).
+      * Export sales auto-resolve to EV; everything else to FV (the standard default).
+    FT/ET (prepayment) are never auto-derived: they require an explicit selection.
+    """
     if doc.get("dgi_invoice_type"):
         return doc.get("dgi_invoice_type")
     if doc.get("is_return"):

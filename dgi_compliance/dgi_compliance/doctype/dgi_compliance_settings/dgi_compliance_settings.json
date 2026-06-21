@@ -11,10 +11,10 @@
   {"fieldname": "request_timeout", "label": "Request Timeout (s)", "fieldtype": "Int", "default": "15"},
   {"fieldname": "cb_1", "fieldtype": "Column Break"},
   {"fieldname": "default_nif", "label": "Seller NIF (default)", "fieldtype": "Data", "description": "If empty, taken from Company.tax_id"},
-  {"fieldname": "isf", "label": "ISF (AAA-BBB-NN)", "fieldtype": "Data"},
-  {"fieldname": "default_invoice_type", "label": "Default Invoice Type", "fieldtype": "Select", "options": "FV\nFT\nFA\nEV\nET\nEA", "default": "FV"},
+  {"fieldname": "isf", "label": "ISF (AAA-BBB-NN)", "fieldtype": "Data", "reqd": 1, "description": "Identifiant Systeme de Facturation. SOURCE UNIQUE: applique automatiquement a TOUTES les factures (FV/EV/FT/ET/FA/EA). Aucune ressaisie au niveau facture."},
+  {"fieldname": "default_invoice_type", "label": "Default Invoice Type", "fieldtype": "Select", "options": "FV\nEV", "default": "FV", "description": "Type standard par defaut quand la facture n'est ni un avoir ni un acompte (FV local, EV export)."},
   {"fieldname": "price_mode", "label": "Price Mode", "fieldtype": "Select", "options": "ttc\nht", "default": "ttc"},
-  {"fieldname": "auto_normalize", "label": "Auto-normalize on Submit", "fieldtype": "Check", "default": "1"},
+  {"fieldname": "auto_normalize", "label": "Auto-normalize on Submit", "fieldtype": "Check", "default": "1", "description": "Si coche, la normalisation e-DEF est tentee automatiquement au moment du postage (before_submit). Sinon, normalisez le brouillon manuellement avant de soumettre."},
   {"fieldname": "token_valid_until", "label": "Token Valid Until", "fieldtype": "Datetime", "read_only": 1},
 
   {"fieldname": "sb_cur", "label": "Currency Reconciliation (CDF)", "fieldtype": "Section Break", "description": "Toutes les valeurs API sont en CDF. La DGI recalcule; si l'ecart total <= tolerance, on retient la valeur DGI et on comptabilise la difference en ecart de change."},
@@ -54,12 +54,16 @@
   {"fieldname": "default_tax_group", "label": "Default Tax Group (A-P)", "fieldtype": "Select", "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP", "default": "A"},
   {"fieldname": "tax_group_map", "label": "Tax Group Mapping", "fieldtype": "Table", "options": "DGI Tax Group Map"},
 
-  {"fieldname": "sb_lock", "label": "Validation & Verrouillage (Matrices)", "fieldtype": "Section Break", "description": "Pilote le moteur de verrouillage base sur les Matrices A-F (DGI Validation Matrix, DGI Customer Type, DGI Point of Sale)."},
-  {"fieldname": "validation_enforcement", "label": "Mode de validation", "fieldtype": "Select", "options": "Enforce\nWarn only\nOff", "default": "Enforce", "description": "Enforce = bloque les combinaisons interdites; Warn only = avertit sans bloquer; Off = desactive."},
-  {"fieldname": "default_vat_group", "label": "Groupe TVA par defaut", "fieldtype": "Select", "options": "LOC\nFOR", "default": "LOC", "description": "Utilise quand la facture ne precise pas LOC/FOR."},
+  {"fieldname": "sb_ctype", "label": "Mapping Type de client (ERPNext -> DGI)", "fieldtype": "Section Break", "description": "Fait correspondre le Customer Type NATIF d'ERPNext (Company, Individual, ...) aux types DGI (PP/PM/PC/PL/AO). Utilise pour deduire le type DGI manquant et pour valider la facture avant normalisation (Matrice G). Ex.: Company -> PM uniquement; Individual -> PP ou PL."},
+  {"fieldname": "enforce_customer_type_map", "label": "Verrouiller le mapping Type de client", "fieldtype": "Check", "default": "1", "description": "Si coche, une facture dont le type DGI du client n'est pas autorise pour son Customer Type natif est bloquee (Matrice G)."},
+  {"fieldname": "customer_type_map", "label": "Customer Type Mapping", "fieldtype": "Table", "options": "DGI Customer Type Mapping"},
+
+  {"fieldname": "sb_lock", "label": "Validation & Verrouillage (Matrices)", "fieldtype": "Section Break", "description": "Pilote le moteur de verrouillage base sur les Matrices A-G (DGI Validation Matrix, DGI Customer Type, DGI Point of Sale, mapping Type de client)."},
+  {"fieldname": "validation_enforcement", "label": "Mode de validation (matrices)", "fieldtype": "Select", "options": "Enforce\nWarn only\nOff", "default": "Enforce", "description": "Enforce = bloque les combinaisons interdites; Warn only = avertit sans bloquer; Off = desactive."},
+  {"fieldname": "normalization_gating", "label": "Verrouillage postage (normalisation)", "fieldtype": "Select", "options": "Enforce\nOff", "default": "Enforce", "description": "Enforce = une facture ne peut etre soumise (postee) que si elle est Normalized. Off = comportement classique."},
   {"fieldname": "country_code_local", "label": "Code pays local (ISO-2)", "fieldtype": "Data", "default": "CD", "description": "Pays considere comme 'local' pour la Matrice C (RDC = CD)."},
   {"fieldname": "cb_lock", "fieldtype": "Column Break"},
-  {"fieldname": "override_roles", "label": "Roles autorises a l'override", "fieldtype": "Small Text", "default": "System Manager", "description": "Roles (separes par des virgules) pouvant forcer l'enregistrement d'une combinaison bloquee."}
+  {"fieldname": "override_roles", "label": "Roles autorises a l'override", "fieldtype": "Small Text", "default": "System Manager", "description": "Roles (separes par des virgules) pouvant forcer l'enregistrement d'une combinaison bloquee ou le postage d'une facture non normalisee."}
  ],
  "permissions": [
   {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1, "share": 1},

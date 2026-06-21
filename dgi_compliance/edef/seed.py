@@ -3,7 +3,7 @@ reference data is present right after install/update without needing the network
 
 Account-specific / evolving data (tax group VALUES, currency rates, points de vente) is NOT
 seeded here on purpose: it is pulled live by dgi_compliance.edef.sync. Seeding is insert-only:
-it never overwrites a value already refreshed from the DGI server.
+it never overwrites a value already refreshed from the DGI server or edited by an administrator.
 """
 import frappe
 
@@ -70,7 +70,7 @@ def seed_static_catalogs(force: bool = False) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# v2 - dedicated mapping DocTypes (insert-only; never clobbers user edits)
+# Dedicated mapping DocTypes (insert-only; never clobbers user edits)
 # --------------------------------------------------------------------------- #
 
 ITEM_TYPES = [
@@ -104,6 +104,14 @@ _REQ_ORDER = ["req_bill_to_name", "req_vat_reg_no", "req_contact", "req_address"
 
 TAX_GROUPS = list("ABCDEFGHIJKLMNOP")
 
+# Matrix G default: native ERPNext Customer Type -> allowed DGI types (is_default flag)
+# Company (Societe) => PM only; Individual (Individuel) => PP (default) or PL.
+CUSTOMER_TYPE_MAP = [
+    ("Company", "PM", 1),
+    ("Individual", "PP", 1),
+    ("Individual", "PL", 0),
+]
+
 
 def _insert_if_missing(doctype, name, values):
     if frappe.db.exists(doctype, name):
@@ -133,21 +141,38 @@ def seed_mapping_doctypes(force: bool = False) -> dict:
     return counts
 
 
+def seed_customer_type_mapping(force: bool = False) -> dict:
+    """Populate DGI Compliance Settings -> Customer Type Mapping with sensible defaults.
+    Insert-only: skipped when the administrator already configured at least one row."""
+    settings = frappe.get_single("DGI Compliance Settings")
+    if settings.get("customer_type_map") and not force:
+        return {"skipped": True}
+    if force:
+        settings.set("customer_type_map", [])
+    n = 0
+    for native, dgi_code, is_default in CUSTOMER_TYPE_MAP:
+        if not frappe.db.exists("DGI Customer Type", dgi_code):
+            continue
+        settings.append("customer_type_map", {
+            "erpnext_customer_type": native, "dgi_customer_type": dgi_code, "is_default": is_default})
+        n += 1
+    settings.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"seeded": n}
+
+
 # --------------------------------------------------------------------------- #
-# v2 - default validation matrices (A-F). Seeded only when the table is empty,
+# Default validation matrices (C-F). Seeded only when the table is empty,
 # so user customisations are never overwritten on migrate.
 # --------------------------------------------------------------------------- #
 
-# Matrix C: (invoice_type, vat_group, country_scope, status)
+# Matrix C: (invoice_type, country_scope, status)
+# Local invoices (F*) require a local country (CD); export invoices (E*) require a foreign one.
 MATRIX_C_ROWS = [
-    ("FV", "LOC", "CD", "Allow"), ("FT", "LOC", "CD", "Allow"), ("FA", "LOC", "CD", "Allow"),
-    ("EV", "LOC", "CD", "Blocked"), ("ET", "LOC", "CD", "Blocked"), ("EA", "LOC", "CD", "Blocked"),
-    ("FV", "FOR", "CD", "Blocked"), ("FT", "FOR", "CD", "Blocked"), ("FA", "FOR", "CD", "Blocked"),
-    ("EV", "FOR", "CD", "Allow"), ("ET", "FOR", "CD", "Allow"), ("EA", "FOR", "CD", "Allow"),
-    ("FT", "LOC", "Non-CD", "Blocked"), ("FA", "LOC", "Non-CD", "Blocked"),
-    ("EV", "LOC", "Non-CD", "Allow"), ("ET", "LOC", "Non-CD", "Allow"), ("EA", "LOC", "Non-CD", "Allow"),
-    ("FV", "FOR", "Non-CD", "Blocked"), ("FT", "FOR", "Non-CD", "Blocked"), ("FA", "FOR", "Non-CD", "Blocked"),
-    ("EV", "FOR", "Non-CD", "Allow"), ("ET", "FOR", "Non-CD", "Allow"), ("EA", "FOR", "Non-CD", "Allow"),
+    ("FV", "CD", "Allow"), ("FT", "CD", "Allow"), ("FA", "CD", "Allow"),
+    ("FV", "Non-CD", "Blocked"), ("FT", "Non-CD", "Blocked"), ("FA", "Non-CD", "Blocked"),
+    ("EV", "CD", "Blocked"), ("ET", "CD", "Blocked"), ("EA", "CD", "Blocked"),
+    ("EV", "Non-CD", "Allow"), ("ET", "Non-CD", "Allow"), ("EA", "Non-CD", "Allow"),
 ]
 
 # Matrix D baseline: permissive (All/Any -> Allow). Replace with the official DGI grid as needed.
@@ -165,7 +190,7 @@ MATRIX_F_ROWS = [
     ("RRR", "BIE", "Blocked"), ("RRR", "SER", "Allow"), ("RRR", "TAX", "Allow"),
 ]
 
-MATRIX_C = "C - Invoice Type / VAT Group / Country"
+MATRIX_C = "C - Invoice Type / Country"
 MATRIX_D = "D - Item Type / Tax Group"
 MATRIX_E = "E - Prepayment / Item Type"
 MATRIX_F = "F - Credit Nature / Item Type"
@@ -175,9 +200,9 @@ def seed_validation_matrix(force: bool = False) -> dict:
     if not force and frappe.db.count("DGI Validation Matrix") > 0:
         return {"skipped": True}
     n = 0
-    for it, vg, cs, status in MATRIX_C_ROWS:
+    for it, cs, status in MATRIX_C_ROWS:
         frappe.get_doc({"doctype": "DGI Validation Matrix", "matrix_type": MATRIX_C,
-                        "invoice_type": it, "vat_group": vg, "country_scope": cs,
+                        "invoice_type": it, "country_scope": cs,
                         "status": status, "enforcement": "Block", "is_active": 1}).insert(ignore_permissions=True)
         n += 1
     for itm, tg, status in MATRIX_D_ROWS:
@@ -203,6 +228,7 @@ def seed_all(force: bool = False) -> dict:
     return {
         "reference_values": seed_static_catalogs(force=force),
         "mapping": seed_mapping_doctypes(force=force),
+        "customer_type_mapping": seed_customer_type_mapping(force=force),
         "matrix": seed_validation_matrix(force=force),
     }
 
@@ -210,4 +236,5 @@ def seed_all(force: bool = False) -> dict:
 def after_install():
     seed_static_catalogs()
     seed_mapping_doctypes()
+    seed_customer_type_mapping()
     seed_validation_matrix()

@@ -2,16 +2,18 @@
 
 Every rule lives in a user-editable DocType, so nothing here is hard-coded:
 
-  * Matrix A  -> DGI Point of Sale   (NID / Token requirement per sales location)
-  * Matrix B  -> DGI Customer Type   (mandatory customer-card fields per client type)
-  * Matrix C  -> DGI Validation Matrix (Invoice Type x VAT Group x Country)
+  * Matrix A  -> DGI Point of Sale     (NID / Token requirement per sales location)
+  * Matrix B  -> DGI Customer Type     (mandatory customer-card fields per client type)
+  * Matrix C  -> DGI Validation Matrix (Invoice Type x Country)
   * Matrix D  -> DGI Validation Matrix (Item Type x Tax Group)
   * Matrix E  -> DGI Validation Matrix (Prepayment/Invoice Type x Item Type)
   * Matrix F  -> DGI Validation Matrix (Credit Nature x Item Type)
+  * Matrix G  -> DGI Customer Type Mapping (native ERPNext Customer Type -> allowed DGI type)
+  * Invoice-type context rules (FV/EV default, FT/ET prepayment, FA/EA credit notes)
 
 The engine is wired into the Sales Invoice `validate` event. It blocks invalid combinations
 (unless an authorised user ticks the override) and always records what happened in the audit log.
-It never touches ERPNext core DocTypes.
+It never touches ERPNext core DocTypes. The LOC/FOR VAT group has been removed in v3.0.
 """
 import frappe
 from frappe import _
@@ -23,6 +25,11 @@ from dgi_compliance.dgi_compliance.doctype.dgi_validation_matrix.dgi_validation_
 )
 
 WILDCARDS = {None, "", "Any", "All"}
+
+CREDIT_TYPES = ("FA", "EA")
+PREPAYMENT_TYPES = ("FT", "ET")
+STANDARD_TYPES = ("FV", "EV")
+EXPORT_TYPES = ("EV", "ET", "EA")
 
 
 # --------------------------------------------------------------------------- #
@@ -37,7 +44,7 @@ def _rows(matrix_type):
             "DGI Validation Matrix",
             filters={"matrix_type": matrix_type, "is_active": 1},
             fields=["name", "status", "enforcement", "priority", "message",
-                    "invoice_type", "vat_group", "country_scope",
+                    "invoice_type", "country_scope",
                     "item_type", "tax_group", "credit_nature"],
         )
     return cache[matrix_type]
@@ -88,17 +95,6 @@ def resolve_invoice_type(doc, settings=None):
     return _invoice_type(doc, settings)
 
 
-def resolve_vat_group(doc, settings=None):
-    settings = settings or get_settings()
-    v = (doc.get("custom_dgi_vat_group") or "").upper()
-    if v in ("LOC", "FOR"):
-        return v
-    tc = (doc.get("tax_category") or "").lower()
-    if any(k in tc for k in ("export", "for", "etrang", "foreign", "international")):
-        return "FOR"
-    return (getattr(settings, "default_vat_group", None) or "LOC").upper()
-
-
 def _country_iso2(country_name):
     if not country_name:
         return None
@@ -139,6 +135,105 @@ def resolve_credit_nature(doc):
     return (doc.get("custom_dgi_reference_type") or "").upper() or None
 
 
+def _erpnext_customer_type(doc):
+    """Native ERPNext Customer.customer_type for the invoice's customer."""
+    if not doc.get("customer"):
+        return None
+    return frappe.db.get_value("Customer", doc.get("customer"), "customer_type")
+
+
+def resolve_customer_dgi_type(doc, settings=None):
+    """Effective DGI customer type code: explicit on invoice/customer, else derived from the
+    native Customer Type via the mapping default (DGI Settings -> Customer Type Mapping)."""
+    settings = settings or get_settings()
+    ctype = doc.get("dgi_customer_type")
+    if not ctype and doc.get("customer"):
+        ctype = frappe.db.get_value("Customer", doc.get("customer"), "dgi_customer_type")
+    if not ctype:
+        ctype = settings.default_dgi_type_for_customer_type(_erpnext_customer_type(doc))
+    return ctype or None
+
+
+# --------------------------------------------------------------------------- #
+# Matrix G - native Customer Type -> allowed DGI type
+# --------------------------------------------------------------------------- #
+
+def evaluate_customer_type_mapping(doc, settings=None):
+    """Matrix G: the customer's DGI type must be allowed for its native ERPNext Customer Type."""
+    settings = settings or get_settings()
+    if not getattr(settings, "enforce_customer_type_map", 1):
+        return []
+    native = _erpnext_customer_type(doc)
+    allowed = settings.dgi_types_for_customer_type(native)
+    if not allowed:
+        # No mapping configured for this native type -> nothing to enforce.
+        return []
+    effective = resolve_customer_dgi_type(doc, settings)
+    allowed_txt = "/".join(allowed)
+    if not effective:
+        return [{
+            "matrix": "G - Mapping Type de client",
+            "enforcement": "Block",
+            "message": _("Matrice G: Type de client DGI requis pour le Customer Type natif '{0}'. "
+                         "Valeurs autorisees: {1}.").format(native, allowed_txt),
+            "rule": native,
+        }]
+    if effective not in allowed:
+        return [{
+            "matrix": "G - Mapping Type de client",
+            "enforcement": "Block",
+            "message": _("Matrice G: Type de client DGI '{0}' non autorise pour le Customer Type "
+                         "natif '{1}'. Valeurs autorisees: {2}.").format(effective, native, allowed_txt),
+            "rule": native,
+        }]
+    return []
+
+
+# --------------------------------------------------------------------------- #
+# Invoice-type context rules (FV/EV default, FT/ET prepayment, FA/EA credit)
+# --------------------------------------------------------------------------- #
+
+def evaluate_invoice_type_context(doc, settings=None):
+    """Coherence rules between the resolved DGI invoice type and the ERPNext invoice context."""
+    settings = settings or get_settings()
+    it = resolve_invoice_type(doc, settings)
+    violations = []
+
+    def block(msg):
+        violations.append({"matrix": "Type de facture", "enforcement": "Block",
+                           "message": msg, "rule": it})
+
+    is_return = bool(doc.get("is_return"))
+    is_export = bool(doc.get("custom_dgi_export"))
+
+    if it not in ("FV", "FT", "FA", "EV", "ET", "EA"):
+        block(_("Type de facture DGI invalide: {0}.").format(it))
+        return violations
+
+    # Returns / credit notes must be FA or EA, and conversely.
+    if is_return and it not in CREDIT_TYPES:
+        block(_("Un retour / avoir ERPNext doit etre de type FA ou EA (type actuel: {0}).").format(it))
+    if it in CREDIT_TYPES and not (doc.get("return_against") or doc.get("custom_dgi_reference")):
+        block(_("Type {0} (avoir): la reference d'origine (Code DEF/DGI) ou la facture liee est obligatoire.").format(it))
+
+    # Prepayment types are never returns.
+    if it in PREPAYMENT_TYPES and is_return:
+        block(_("Type {0} (acompte/prepaiement) incompatible avec un retour ERPNext.").format(it))
+
+    # Standard types are never returns.
+    if it in STANDARD_TYPES and is_return:
+        block(_("Type {0} incompatible avec un retour ERPNext (utilisez FA/EA).").format(it))
+
+    # Export flag must be consistent with E* / F* family.
+    if is_export and it not in EXPORT_TYPES:
+        block(_("'Facture a l'exportation' cochee mais le type {0} n'est pas un type export (EV/ET/EA).").format(it))
+    if (not is_export) and it in EXPORT_TYPES and not doc.get("dgi_invoice_type"):
+        # Only enforce when the type was auto-derived; explicit export types are allowed.
+        pass
+
+    return violations
+
+
 # --------------------------------------------------------------------------- #
 # Matrix B - mandatory customer-card fields
 # --------------------------------------------------------------------------- #
@@ -169,13 +264,10 @@ def _customer_field_present(doc, key):
     return True
 
 
-def evaluate_customer_fields(doc):
+def evaluate_customer_fields(doc, settings=None):
     """Matrix B: returns a list of violation dicts for missing mandatory customer fields."""
-    ctype = doc.get("dgi_customer_type")
-    if not ctype:
-        # Fall back to the customer's configured type if the invoice field is empty.
-        ctype = doc.get("customer") and frappe.db.get_value(
-            "Customer", doc.get("customer"), "dgi_customer_type")
+    settings = settings or get_settings()
+    ctype = resolve_customer_dgi_type(doc, settings)
     if not ctype or not frappe.db.exists("DGI Customer Type", ctype):
         return []
     ct = frappe.get_cached_doc("DGI Customer Type", ctype)
@@ -235,16 +327,18 @@ def collect_violations(doc, settings=None):
     frappe.flags.pop("_dgi_matrix_cache", None)  # fresh rule snapshot per document
 
     invoice_type = resolve_invoice_type(doc, settings)
-    vat_group = resolve_vat_group(doc, settings)
     country_scope = resolve_country_scope(doc, settings)
     credit_nature = resolve_credit_nature(doc)
 
     violations = []
 
-    # Matrix C - header level
+    # Invoice-type context coherence (FV/EV/FT/ET/FA/EA)
+    violations.extend(evaluate_invoice_type_context(doc, settings))
+
+    # Matrix C - header level (Invoice Type x Country)
     v = _decide(MATRIX_C,
-                {"invoice_type": invoice_type, "vat_group": vat_group, "country_scope": country_scope},
-                _("Matrice C (Facture/TVA/Pays)"))
+                {"invoice_type": invoice_type, "country_scope": country_scope},
+                _("Matrice C (Facture/Pays)"))
     if v:
         violations.append(v)
 
@@ -270,9 +364,10 @@ def collect_violations(doc, settings=None):
             if vf:
                 violations.append(vf)
 
-    # Matrix A and Matrix B
+    # Matrix A, B, G
     violations.extend(evaluate_point_of_sale(doc))
-    violations.extend(evaluate_customer_fields(doc))
+    violations.extend(evaluate_customer_fields(doc, settings))
+    violations.extend(evaluate_customer_type_mapping(doc, settings))
     return violations
 
 
@@ -314,7 +409,7 @@ def validate_sales_invoice(doc, method=None):
         return
 
     # Enforce: block the save.
-    msg = "<br>".join("• " + v["message"] for v in blocking)
+    msg = "<br>".join("&bull; " + v["message"] for v in blocking)
     hint = _("Corrigez les donnees, ajustez la matrice concernee, ou cochez "
              "'Override validation DGI' (administrateur) pour forcer l'enregistrement.")
     frappe.throw(msg + "<br><br>" + hint, title=_("Combinaison non conforme DGI"))

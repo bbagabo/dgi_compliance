@@ -1,4 +1,19 @@
-"""Document events, normalization flow, retry, currency reconciliation, token monitoring."""
+"""Document events, normalization flow, retry, currency reconciliation, token monitoring.
+
+v3.0 posting gate
+-----------------
+A Sales Invoice can only be POSTED (submitted -> GL / stock impact) once it is NORMALIZED.
+Non-normalized invoices stay DRAFTS (no GL, no stock, no accounting impact) and are listed in
+the dedicated report "Factures en attente de normalisation". The gate lives in `before_submit`:
+
+  * normalization_gating = Enforce (default):
+      - status == Normalized          -> submit allowed
+      - auto_normalize on             -> normalize now; allow if it succeeds, else block
+      - auto_normalize off            -> block; user must click "Normaliser (DGI)" on the draft
+      - authorised override + flag    -> allowed despite failure
+  * normalization_gating = Off:
+      - classic behaviour: invoice submits, then normalizes in `on_submit`.
+"""
 import frappe
 from frappe import _
 from frappe.utils import nowdate, getdate, get_datetime, date_diff, flt
@@ -12,14 +27,102 @@ from dgi_compliance.edef.util import to_db_datetime
 
 WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+# Result fields cleared when a normalized draft is edited and must be re-normalized.
+_RESULT_FIELDS = ("custom_dgi_uid", "custom_dgi_code_def", "custom_dgi_counters", "custom_dgi_nim",
+                  "custom_dgi_datetime", "custom_dgi_qr_code", "custom_dgi_qr_image", "custom_dgi_error")
+
+
+def _can_override(settings):
+    from dgi_compliance.edef.matrix import _can_override as _co
+    return _co(settings)
+
+
+# ---------------- Sales Invoice draft status management ----------------
+
+def manage_draft_normalization_status(doc, method=None):
+    """`validate` hook (runs last): keep the draft's DGI status coherent.
+
+    * a brand-new / not-yet-normalized draft is marked 'Pending' so it shows up in the
+      "Factures en attente de normalisation" list;
+    * a draft that was already Normalized but has since changed (amounts / type) is reset to
+      'Pending' and its e-DEF result is cleared, forcing a fresh normalization before posting.
+    """
+    settings = get_settings()
+    if not settings.enabled:
+        return
+    if doc.docstatus != 0:
+        return
+
+    status = doc.get("custom_dgi_status")
+    if status == "Normalized" and not doc.is_new():
+        changed = (doc.has_value_changed("base_grand_total")
+                   or doc.has_value_changed("grand_total")
+                   or doc.has_value_changed("dgi_invoice_type")
+                   or doc.has_value_changed("custom_dgi_export"))
+        if changed:
+            doc.custom_dgi_status = "Pending"
+            for f in _RESULT_FIELDS:
+                doc.set(f, None)
+            frappe.msgprint(
+                _("Facture modifiee apres normalisation: statut remis a 'Pending'. "
+                  "Re-normalisez avant de soumettre."), indicator="orange", title=_("DGI"))
+            return
+
+    if not status:
+        doc.custom_dgi_status = "Pending"
+
 
 # ---------------- Sales Invoice events ----------------
+
+def before_sales_invoice_submit(doc, method=None):
+    """Posting gate: block submit unless the invoice is normalized (see module docstring)."""
+    settings = get_settings()
+    if not settings.enabled:
+        return
+    gating = (getattr(settings, "normalization_gating", None) or "Enforce")
+    if gating == "Off":
+        return  # classic behaviour; on_submit will normalize after posting
+
+    if doc.get("custom_dgi_status") == "Normalized":
+        return
+
+    overridden = bool(doc.get("dgi_validation_override")) and _can_override(settings)
+
+    if settings.auto_normalize:
+        res = normalize_invoice(doc, settings)
+        if doc.get("custom_dgi_status") == "Normalized":
+            return
+        if overridden:
+            frappe.msgprint(_("Postage force malgre l'echec de normalisation (override)."),
+                            indicator="orange", title=_("DGI"))
+            return
+        stage = (res or {}).get("stage", "?")
+        frappe.throw(
+            _("Postage bloque: la facture n'a pas pu etre normalisee (etape: {0}). "
+              "Corrigez l'erreur DGI (champ 'Erreur DGI') puis re-essayez, ou cochez "
+              "'Override validation DGI'.").format(stage),
+            title=_("Normalisation DGI requise"))
+    else:
+        if overridden:
+            frappe.msgprint(_("Postage force sans normalisation (override)."),
+                            indicator="orange", title=_("DGI"))
+            return
+        frappe.throw(
+            _("Cette facture n'est pas encore normalisee. Ouvrez le brouillon, cliquez "
+              "'Normaliser (DGI)', puis soumettez. (Ou activez 'Auto-normalize on Submit' "
+              "dans DGI Compliance Settings.)"),
+            title=_("Normalisation DGI requise"))
+
 
 def on_sales_invoice_submit(doc, method=None):
     settings = get_settings()
     if not settings.enabled:
         return
-    normalize_invoice(doc, settings)
+    gating = (getattr(settings, "normalization_gating", None) or "Enforce")
+    if gating == "Off":
+        # Classic behaviour: normalize right after posting.
+        normalize_invoice(doc, settings)
+    # Enforce mode: already normalized in before_submit; nothing to do here.
 
 
 def on_sales_invoice_cancel(doc, method=None):
@@ -34,9 +137,26 @@ def on_sales_invoice_cancel(doc, method=None):
     doc.db_set("custom_dgi_status", "Cancelled", update_modified=False)
 
 
+# ---------------- Whitelisted actions (buttons) ----------------
+
+@frappe.whitelist()
+def normalize_sales_invoice(invoice: str) -> dict:
+    """Normalize a DRAFT (or submitted) Sales Invoice on demand ('Normaliser (DGI)' button).
+    On a draft, success sets status = Normalized and unlocks posting."""
+    frappe.only_for(["System Manager", "Accounts Manager"])
+    doc = frappe.get_doc("Sales Invoice", invoice)
+    if doc.docstatus == 2:
+        frappe.throw(_("Facture annulee: normalisation impossible."))
+    settings = get_settings()
+    if not settings.enabled:
+        frappe.throw(_("DGI Compliance est desactive."))
+    log_exchange("normalize-manual", {"invoice": invoice}, None, reference_invoice=invoice)
+    return normalize_invoice(doc, settings) or {"ok": True}
+
+
 @frappe.whitelist()
 def retry_normalization(invoice: str) -> dict:
-    """Re-run the e-DEF normalization for a submitted invoice (used by the 'Retry' button)."""
+    """Re-run the e-DEF normalization for a SUBMITTED invoice (the 'Retry' button)."""
     frappe.only_for(["System Manager", "Accounts Manager"])
     doc = frappe.get_doc("Sales Invoice", invoice)
     if doc.docstatus != 1:

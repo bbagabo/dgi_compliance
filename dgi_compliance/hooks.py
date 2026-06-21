@@ -2,23 +2,26 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "DGI Compliance"
 app_description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe)"
-app_version = "2.0.1"
+app_version = "3.0.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
-# --- Form scripts loaded per DocType (retry button on Sales Invoice) ---
+# --- Form scripts loaded per DocType (normalize / retry buttons on Sales Invoice) ---
 doctype_js = {
     "Sales Invoice": "public/js/sales_invoice.js",
 }
 
 # --- Document events: hook into Sales Invoice without touching core ---
-# validate runs the VAT ceiling FIRST (adjusts totals), then the matrix locking engine.
+# validate: VAT ceiling FIRST (adjusts totals), then the matrix locking engine, then the draft
+#           DGI-status manager. before_submit enforces the posting gate (normalized-before-post).
 doc_events = {
     "Sales Invoice": {
         "validate": [
             "dgi_compliance.edef.rounding.apply_vat_ceiling",
             "dgi_compliance.edef.matrix.validate_sales_invoice",
+            "dgi_compliance.edef.tasks.manage_draft_normalization_status",
         ],
+        "before_submit": "dgi_compliance.edef.tasks.before_sales_invoice_submit",
         "on_submit": "dgi_compliance.edef.tasks.on_sales_invoice_submit",
         "on_cancel": "dgi_compliance.edef.tasks.on_sales_invoice_cancel",
     }
@@ -50,7 +53,6 @@ fixtures = [
             # Sales Invoice - input / classification
             "Sales Invoice-custom_dgi_input_section",
             "Sales Invoice-dgi_invoice_type",
-            "Sales Invoice-custom_dgi_vat_group",
             "Sales Invoice-custom_dgi_export",
             "Sales Invoice-custom_dgi_input_cb",
             "Sales Invoice-custom_dgi_reference",
@@ -72,7 +74,6 @@ fixtures = [
             # Other DocTypes (upgrade-safe links)
             "Customer-dgi_customer_type",
             "Item-dgi_item_type",
-            "Company-dgi_isf_number",
             "POS Profile-dgi_point_of_sale",
         ]]],
     },
