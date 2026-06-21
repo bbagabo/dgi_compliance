@@ -64,18 +64,43 @@ def _invoice_type(doc, settings):
     return settings.default_invoice_type or "FV"
 
 
-def _client(doc):
+CLIENT_TYPES = ("PP", "PM", "PC", "PL", "AO")
+
+
+def _client_dgi_type(doc, settings):
+    """Resolve the e-DEF client type code (ClientTypeEnum) for this invoice's customer:
+    explicit on the invoice/customer, else derived from the native Customer Type via the
+    Customer Type Mapping default (Matrice G). Returns None when it cannot be resolved."""
+    ctype = doc.get("dgi_customer_type")
+    if not ctype and doc.get("customer"):
+        ctype = frappe.db.get_value("Customer", doc.get("customer"), "dgi_customer_type")
+    if not ctype and doc.get("customer"):
+        native = frappe.db.get_value("Customer", doc.get("customer"), "customer_type")
+        ctype = settings.default_dgi_type_for_customer_type(native)
+    return ctype or None
+
+
+def _client(doc, settings):
     name = doc.get("customer_name") or doc.get("customer")
     nif = doc.get("tax_id")
     if not name and not nif:
         return None
     address = frappe.utils.strip_html(doc.get("address_display") or "").replace("\n", ", ").strip(", ").strip()
-    return {
+    client = {
         "nif": nif or None,
         "name": name or None,
         "contact": doc.get("contact_email") or doc.get("contact_mobile") or None,
         "address": address or None,
     }
+    # ClientDto.type (ClientTypeEnum) + typeDesc - required by the e-DEF protocol.
+    ctype = _client_dgi_type(doc, settings)
+    if ctype:
+        client["type"] = ctype
+        if frappe.db.exists("DGI Customer Type", ctype):
+            desc = frappe.db.get_value("DGI Customer Type", ctype, "description")
+            if desc:
+                client["typeDesc"] = desc
+    return client
 
 
 def _payments(doc, settings):
@@ -135,7 +160,7 @@ def build_invoice_request(doc):
         "items": _items(doc, settings, mode),
         "operator": {"id": None, "name": (doc.get("owner") or "SYSTEM")[:60]},
     }
-    client = _client(doc)
+    client = _client(doc, settings)
     if client:
         dto["client"] = client
     payments = _payments(doc, settings)
@@ -177,6 +202,9 @@ def validate_invoice_request(dto):
             errors.append(f"items[{i}].quantity doit etre > 0")
     if not (dto.get("operator") or {}).get("name"):
         errors.append("operator.name manquant")
+    client = dto.get("client") or {}
+    if client.get("type") and client.get("type") not in ("PP", "PM", "PC", "PL", "AO"):
+        errors.append(f"client.type invalide ({client.get('type')})")
     if dto.get("type") in ("FA", "EA") and not dto.get("reference"):
         errors.append("reference obligatoire pour FA/EA (Code DEF/DGI d'origine)")
     return errors

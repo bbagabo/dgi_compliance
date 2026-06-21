@@ -7,6 +7,8 @@ from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_complianc
 
 def log_exchange(direction, payload=None, response=None, error=None,
                  status_code=None, method=None, url=None, reference_invoice=None):
+    # `direction` is a free-text label (Data field): never let it block an exchange.
+    direction = (str(direction) if direction is not None else "")[:60]
     try:
         frappe.get_doc({
             "doctype": "DGI Exchange Log",
