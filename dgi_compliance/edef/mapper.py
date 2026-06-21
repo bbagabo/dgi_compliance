@@ -29,7 +29,7 @@ def _seller_nif(doc, settings):
 def _seller_isf(doc, settings):
     """ISF is defined ONLY in DGI Compliance Settings (single source of truth, applied to every
     invoice type). No per-invoice or per-company override, to avoid divergences."""
-    return settings.isf
+    return (settings.isf or "").strip() or None
 
 
 def _price_mode(doc, settings):
@@ -182,8 +182,12 @@ def validate_invoice_request(dto):
     errors = []
     if not dto.get("nif"):
         errors.append("nif manquant (Company.tax_id ou Settings.default_nif)")
-    if not dto.get("isf") or not re.match(r"^[A-Za-z]{3}-[A-Za-z]{3}-\d{2}$", dto.get("isf") or ""):
-        errors.append("isf doit respecter le format AAA-BBB-NN")
+    isf = (dto.get("isf") or "").strip()
+    if not isf:
+        errors.append("isf manquant: renseignez l'ISF (fourni par la DGI) dans DGI Compliance Settings.")
+    elif isf.upper().replace("-", "") in ("AAABBBNN",):
+        errors.append("isf invalide: 'AAA-BBB-NN' est un gabarit d'exemple - saisissez votre ISF reel dans DGI Compliance Settings.")
+    # Le format exact de l'ISF est valide par la DGI cote serveur: on ne bloque pas sur un motif rigide.
     if dto.get("mode") not in ("ttc", "ht"):
         errors.append("mode doit etre 'ttc' ou 'ht'")
     if dto.get("type") not in INVOICE_TYPES:
