@@ -41,9 +41,10 @@ def _price_mode(doc, settings):
 
 def _item_rate_cdf(it, mode):
     # Always CDF (base currency). Use base_net_rate for HT, else base_rate.
+    # abs(): credit notes use negative qty in ERPNext but the DGI payload must be positive.
     if mode == "ht" and it.get("base_net_rate"):
-        return float(it.base_net_rate)
-    return float(it.get("base_rate") or it.get("base_net_rate") or 0)
+        return abs(float(it.base_net_rate))
+    return abs(float(it.get("base_rate") or it.get("base_net_rate") or 0))
 
 
 def _invoice_type(doc, settings):
@@ -109,7 +110,7 @@ def _payments(doc, settings):
         return None
     return [{
         "name": settings.payment_type_for(p.mode_of_payment),
-        "amount": float(p.base_amount or 0),  # CDF
+        "amount": abs(float(p.base_amount or 0)),  # CDF (abs: returns/credit notes stay positive for DGI)
     } for p in rows]
 
 
@@ -131,7 +132,7 @@ def _items(doc, settings, mode):
             "name": it.get("item_name") or it.get("description") or "ARTICLE",
             "type": _item_edef_type(it.get("item_code")),
             "price": _item_rate_cdf(it, mode),
-            "quantity": float(it.qty or 0),
+            "quantity": abs(float(it.qty or 0)),
             "taxGroup": settings.tax_group_for(it.get("item_tax_template"), None),
         })
     return out

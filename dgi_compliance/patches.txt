@@ -4,3 +4,4 @@
 dgi_compliance.patches.v1_2.seed_static_catalogs
 dgi_compliance.patches.v2_0.seed_mapping_and_matrix
 dgi_compliance.patches.v3_0.cleanup_legacy_fields
+dgi_compliance.patches.v3_1.fix_invalid_link_fields

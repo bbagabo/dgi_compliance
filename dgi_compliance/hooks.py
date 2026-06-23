@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "DGI Compliance"
 app_description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe)"
-app_version = "3.0.2"
+app_version = "3.1.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -17,6 +17,7 @@ doctype_js = {
 doc_events = {
     "Sales Invoice": {
         "validate": [
+            "dgi_compliance.edef.tasks.enforce_return_invoice_type",
             "dgi_compliance.edef.rounding.apply_vat_ceiling",
             "dgi_compliance.edef.matrix.validate_sales_invoice",
             "dgi_compliance.edef.tasks.manage_draft_normalization_status",
@@ -25,6 +26,20 @@ doc_events = {
         "on_submit": "dgi_compliance.edef.tasks.on_sales_invoice_submit",
         "on_cancel": "dgi_compliance.edef.tasks.on_sales_invoice_cancel",
     }
+}
+
+# --- Jinja helpers available in Print Formats (normalized invoice) ---
+jinja = {
+    "methods": [
+        "dgi_compliance.edef.printutils.dgi_tax_summary",
+        "dgi_compliance.edef.printutils.dgi_isf",
+        "dgi_compliance.edef.printutils.dgi_pos_nid",
+        "dgi_compliance.edef.printutils.dgi_amount_in_words",
+        "dgi_compliance.edef.printutils.dgi_item_type",
+        "dgi_compliance.edef.printutils.dgi_item_tax_group",
+        "dgi_compliance.edef.printutils.dgi_invoice_lines",
+        "dgi_compliance.edef.printutils.dgi_totals",
+    ],
 }
 
 # --- Seed static reference catalogs right after install ---

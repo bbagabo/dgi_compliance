@@ -37,6 +37,20 @@ def _can_override(settings):
     return _co(settings)
 
 
+def enforce_return_invoice_type(doc, method=None):
+    """`validate` hook (runs FIRST): a return / credit note (is_return) must be FA (or EA for
+    export). We auto-set the DGI invoice type so FV can never be used for a return - the user is
+    never stuck on a blocked combination, and the rule is enforced rather than just refused."""
+    settings = get_settings()
+    if not settings.enabled:
+        return
+    if not doc.get("is_return"):
+        return
+    want = "EA" if doc.get("custom_dgi_export") else "FA"
+    if (doc.get("dgi_invoice_type") or "") != want:
+        doc.dgi_invoice_type = want
+
+
 # ---------------- Sales Invoice draft status management ----------------
 
 def manage_draft_normalization_status(doc, method=None):
@@ -195,7 +209,8 @@ def normalize_invoice(doc, settings=None):
     doc.db_set("custom_dgi_uid", uid, update_modified=False)
 
     # --- Currency / total reconciliation in CDF (DGI recalculates everything) ---
-    erp_total_cdf = flt(doc.base_grand_total)
+    # abs(): credit notes carry a negative grand total in ERPNext, but the DGI works in positive.
+    erp_total_cdf = abs(flt(doc.base_grand_total))
     total_diff = dgi_total - erp_total_cdf   # >0 => DGI higher than ERPNext
     tol = flt(settings.dgi_total_tolerance or 500)
     if abs(total_diff) > tol:
@@ -214,7 +229,7 @@ def normalize_invoice(doc, settings=None):
 
     # --- Optional VAT-only reconciliation (alert) ---
     if settings.reconcile_with_emcf and (settings.vat_accounts or []):
-        erp_vat = doc_vat_base(doc, settings)
+        erp_vat = abs(doc_vat_base(doc, settings))
         vat_diff = abs(flt(erp_vat) - dgi_vtotal)
         if vat_diff > flt(settings.reconcile_tolerance or 0):
             vmsg = f"Ecart TVA: ERPNext={erp_vat} vs e-MCF={dgi_vtotal} (diff={round(vat_diff, 4)})."

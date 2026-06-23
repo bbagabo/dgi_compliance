@@ -1,4 +1,28 @@
 frappe.ui.form.on("Sales Invoice", {
+    setup(frm) {
+        // On a return / credit note, only FA or EA are valid DGI invoice types.
+        frm.set_query("dgi_invoice_type", () => {
+            if (frm.doc.is_return) {
+                return { filters: { name: ["in", ["FA", "EA"]] } };
+            }
+            return {};
+        });
+    },
+
+    is_return(frm) {
+        // Auto-select FA/EA as soon as the invoice is flagged as a return.
+        if (frm.doc.is_return) {
+            const want = frm.doc.custom_dgi_export ? "EA" : "FA";
+            if (frm.doc.dgi_invoice_type !== want) frm.set_value("dgi_invoice_type", want);
+        }
+    },
+
+    custom_dgi_export(frm) {
+        if (frm.doc.is_return) {
+            frm.set_value("dgi_invoice_type", frm.doc.custom_dgi_export ? "EA" : "FA");
+        }
+    },
+
     refresh(frm) {
         // --- Draft: manual normalization (unlocks posting) ---
         if (frm.doc.docstatus === 0 && !frm.is_new() && frm.doc.custom_dgi_status !== "Normalized") {
