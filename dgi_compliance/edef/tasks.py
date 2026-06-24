@@ -159,6 +159,8 @@ def normalize_sales_invoice(invoice: str) -> dict:
     On a draft, success sets status = Normalized and unlocks posting."""
     frappe.only_for(["System Manager", "Accounts Manager"])
     doc = frappe.get_doc("Sales Invoice", invoice)
+    if not frappe.has_permission("Sales Invoice", "write", doc=doc):
+        frappe.throw(_("Permission insuffisante sur cette facture."), frappe.PermissionError)
     if doc.docstatus == 2:
         frappe.throw(_("Facture annulee: normalisation impossible."))
     settings = get_settings()
@@ -173,6 +175,8 @@ def retry_normalization(invoice: str) -> dict:
     """Re-run the e-DEF normalization for a SUBMITTED invoice (the 'Retry' button)."""
     frappe.only_for(["System Manager", "Accounts Manager"])
     doc = frappe.get_doc("Sales Invoice", invoice)
+    if not frappe.has_permission("Sales Invoice", "write", doc=doc):
+        frappe.throw(_("Permission insuffisante sur cette facture."), frappe.PermissionError)
     if doc.docstatus != 1:
         frappe.throw(_("La facture doit etre soumise."))
     settings = get_settings()

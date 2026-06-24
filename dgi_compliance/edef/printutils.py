@@ -121,11 +121,33 @@ def dgi_invoice_lines(doc):
 
 
 def dgi_totals(doc):
-    """Positive-magnitude document totals for the normalized print format."""
+    """Positive-magnitude document totals for the normalized print format.
+    base_* values are in CDF (local currency) - the amounts actually transmitted to the DGI."""
     return {
         "net_total": abs(flt(doc.get("net_total"))),
         "discount": abs(flt(doc.get("discount_amount"))),
         "tax_total": abs(flt(doc.get("total_taxes_and_charges"))),
         "grand_total": abs(flt(doc.get("grand_total"))),
-        "base_grand_total": abs(flt(doc.get("base_grand_total"))),
+        "net_total_cdf": abs(flt(doc.get("base_net_total"))),
+        "tax_total_cdf": abs(flt(doc.get("base_total_taxes_and_charges"))),
+        "grand_total_cdf": abs(flt(doc.get("base_grand_total"))),
     }
+
+
+def dgi_is_foreign(doc) -> bool:
+    """True when the invoice currency is not the local currency (CDF)."""
+    try:
+        company_ccy = frappe.get_cached_value("Company", doc.company, "default_currency")
+    except Exception:
+        company_ccy = "CDF"
+    ccy = doc.get("currency")
+    return bool(ccy and ccy not in (company_ccy, "CDF"))
+
+
+def dgi_cur_rate(doc):
+    """CDF-per-foreign-unit rate to show on a foreign-currency invoice (mirrors the payload)."""
+    try:
+        from dgi_compliance.edef.mapper import _cur_rate
+        return _cur_rate(doc)
+    except Exception:
+        return flt(doc.get("conversion_rate"))

@@ -5,6 +5,19 @@ from frappe.utils import add_to_date, now_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 
 
+_SECRET_KEYS = ("token", "authorization", "password", "secret", "jwt", "apikey", "api_key", "bearer")
+
+
+def _redact(obj):
+    """Recursively mask values whose key looks like a credential, before persisting a log."""
+    if isinstance(obj, dict):
+        return {k: ("***REDACTED***" if any(s in str(k).lower() for s in _SECRET_KEYS) else _redact(v))
+                for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_redact(x) for x in obj]
+    return obj
+
+
 def log_exchange(direction, payload=None, response=None, error=None,
                  status_code=None, method=None, url=None, reference_invoice=None):
     # `direction` is a free-text label (Data field): never let it block an exchange.
@@ -17,8 +30,8 @@ def log_exchange(direction, payload=None, response=None, error=None,
             "url": url,
             "status_code": status_code,
             "reference_invoice": reference_invoice,
-            "request_payload": frappe.as_json(payload) if payload is not None else None,
-            "response_payload": frappe.as_json(response) if response is not None else None,
+            "request_payload": frappe.as_json(_redact(payload)) if payload is not None else None,
+            "response_payload": frappe.as_json(_redact(response)) if response is not None else None,
             "error": (str(error)[:500] if error else None),
         }).insert(ignore_permissions=True)
     except Exception:

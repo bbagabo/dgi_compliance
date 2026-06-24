@@ -1,8 +1,17 @@
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
 class DGIComplianceSettings(Document):
+    def validate(self):
+        # Security: warn (do not block) when the active e-DEF endpoint is not HTTPS.
+        url = self.base_url()
+        if url and not url.lower().startswith("https://"):
+            frappe.msgprint(_("Avertissement securite DGI: l'URL e-DEF active n'est pas en HTTPS "
+                              "({0}). Le jeton transiterait en clair.").format(url),
+                            indicator="orange", title=_("Securite"))
+
     def base_url(self) -> str:
         if (self.environment or "Test") == "Production":
             return (self.base_url_production or "").rstrip("/")
@@ -54,6 +63,33 @@ class DGIComplianceSettings(Document):
             if r.get("is_default"):
                 return r.dgi_customer_type
         return rows[0].dgi_customer_type if len(rows) == 1 else None
+
+
+    # ---- Currency matrix (authorized currencies + conversion rule) ----
+
+    def currency_rule_for(self, currency, invoice_type=None):
+        """Most specific active rule for (currency, invoice_type): an exact invoice_type wins over
+        an 'Any' rule. Returns None when the currency is not listed at all."""
+        best, best_spec = None, -1
+        for r in (self.currency_rules or []):
+            if (r.currency or "") != (currency or ""):
+                continue
+            it = (r.invoice_type or "Any")
+            if it not in ("Any", "", None) and invoice_type and it != invoice_type:
+                continue
+            spec = 1 if it not in ("Any", "", None) else 0
+            if spec > best_spec:
+                best, best_spec = r, spec
+        return best
+
+    def currency_allowed(self, currency, invoice_type=None) -> bool:
+        """True when the currency may be used. No rules configured => allow everything (compat)."""
+        if not (self.currency_rules or []):
+            return True
+        rule = self.currency_rule_for(currency, invoice_type)
+        if rule is None:
+            return False  # currency absent from the matrix => not allowed
+        return bool(rule.is_allowed)
 
 
 def get_settings() -> "DGIComplianceSettings":

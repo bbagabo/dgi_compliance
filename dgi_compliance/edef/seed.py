@@ -233,6 +233,33 @@ def seed_all(force: bool = False) -> dict:
     }
 
 
+# Default currency matrix: local CDF allowed everywhere; USD allowed (ERPNext rate). Insert-only.
+CURRENCY_RULES = [
+    ("CDF", "Any", 1, "ERPNext"),
+    ("USD", "Any", 1, "ERPNext"),
+]
+
+
+def seed_currency_rules(force: bool = False) -> dict:
+    """Populate DGI Compliance Settings -> Currency Rules with sensible defaults.
+    Insert-only: skipped once the administrator has configured at least one rule."""
+    settings = frappe.get_single("DGI Compliance Settings")
+    if settings.get("currency_rules") and not force:
+        return {"skipped": True}
+    if force:
+        settings.set("currency_rules", [])
+    n = 0
+    for ccy, itype, allowed, src in CURRENCY_RULES:
+        if not frappe.db.exists("Currency", ccy):
+            continue
+        settings.append("currency_rules", {
+            "currency": ccy, "invoice_type": itype, "is_allowed": allowed, "rate_source": src})
+        n += 1
+    settings.save(ignore_permissions=True)
+    frappe.db.commit()
+    return {"seeded": n}
+
+
 def set_default_print_format():
     """Make 'DGI Sales Invoice' the default Print Format for Sales Invoice, via a Property Setter
     (DocType-level 'default_print_format'). This is the standard, upgrade-safe Frappe mechanism:
@@ -256,4 +283,5 @@ def after_install():
     seed_mapping_doctypes()
     seed_customer_type_mapping()
     seed_validation_matrix()
+    seed_currency_rules()
     set_default_print_format()

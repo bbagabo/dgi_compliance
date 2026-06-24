@@ -415,6 +415,35 @@ def validate_sales_invoice(doc, method=None):
     frappe.throw(msg + "<br><br>" + hint, title=_("Combinaison non conforme DGI"))
 
 
+def validate_currency(doc, method=None):
+    """`validate` hook: enforce the DGI currency matrix (authorized currencies per invoice type).
+    Independent from the A-G matrices switch; governed by Settings.currency_enforcement."""
+    settings = get_settings()
+    if not settings.enabled:
+        return
+    mode = getattr(settings, "currency_enforcement", None) or "Enforce"
+    if mode == "Off" or not (settings.currency_rules or []):
+        return
+    invoice_type = resolve_invoice_type(doc, settings)
+    ccy = doc.get("currency")
+    if settings.currency_allowed(ccy, invoice_type):
+        return
+    msg = _("Devise {0} non autorisee pour le type de facture {1} (matrice des devises DGI).").format(ccy, invoice_type)
+    try:
+        from dgi_compliance.edef.audit import log_exchange
+        log_exchange("currency-validate",
+                     {"invoice": doc.name or doc.get("__newname"), "currency": ccy, "invoice_type": invoice_type},
+                     {"allowed": False}, reference_invoice=doc.name)
+    except Exception:
+        pass
+    overridden = bool(doc.get("dgi_validation_override")) and _can_override(settings)
+    if mode == "Warn only" or overridden:
+        frappe.msgprint(msg, indicator="orange", title=_("Avertissement devise DGI"))
+        return
+    frappe.throw(msg + "<br><br>" + _("Ajoutez la devise a la matrice (DGI Compliance Settings > "
+                 "Devises) ou cochez 'Override validation DGI'."), title=_("Devise non autorisee"))
+
+
 def validate_point_of_sale_doc(doc, method=None):
     """Optional Customer hook placeholder kept for symmetry / future use."""
     return

@@ -58,6 +58,10 @@
   {"fieldname": "enforce_customer_type_map", "label": "Verrouiller le mapping Type de client", "fieldtype": "Check", "default": "1", "description": "Si coche, une facture dont le type DGI du client n'est pas autorise pour son Customer Type natif est bloquee (Matrice G)."},
   {"fieldname": "customer_type_map", "label": "Customer Type Mapping", "fieldtype": "Table", "options": "DGI Customer Type Mapping"},
 
+  {"fieldname": "sb_ccy", "label": "Devises (Matrice de facturation)", "fieldtype": "Section Break", "description": "Devises autorisees pour la facturation client (par type de facture) et regle de conversion. Tous les montants sont transmis a la DGI en CDF; pour une facture en devise, le taux est joint (curRate)."},
+  {"fieldname": "currency_enforcement", "label": "Application matrice devises", "fieldtype": "Select", "options": "Enforce\nWarn only\nOff", "default": "Enforce", "description": "Enforce = bloque une devise non autorisee; Warn only = avertit; Off = desactive. Si la table est vide, aucune restriction."},
+  {"fieldname": "currency_rules", "label": "Currency Rules", "fieldtype": "Table", "options": "DGI Currency Rule"},
+
   {"fieldname": "sb_lock", "label": "Validation & Verrouillage (Matrices)", "fieldtype": "Section Break", "description": "Pilote le moteur de verrouillage base sur les Matrices A-G (DGI Validation Matrix, DGI Customer Type, DGI Point of Sale, mapping Type de client)."},
   {"fieldname": "validation_enforcement", "label": "Mode de validation (matrices)", "fieldtype": "Select", "options": "Enforce\nWarn only\nOff", "default": "Enforce", "description": "Enforce = bloque les combinaisons interdites; Warn only = avertit sans bloquer; Off = desactive."},
   {"fieldname": "normalization_gating", "label": "Verrouillage postage (normalisation)", "fieldtype": "Select", "options": "Enforce\nOff", "default": "Enforce", "description": "Enforce = une facture ne peut etre soumise (postee) que si elle est Normalized. Off = comportement classique."},

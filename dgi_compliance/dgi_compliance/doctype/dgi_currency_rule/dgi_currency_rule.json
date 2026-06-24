@@ -1,0 +1,13 @@
+{
+ "doctype": "DocType", "name": "DGI Currency Rule", "module": "DGI Compliance",
+ "istable": 1, "custom": 0, "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "currency", "label": "Devise", "fieldtype": "Link", "options": "Currency", "in_list_view": 1, "columns": 2, "reqd": 1},
+  {"fieldname": "invoice_type", "label": "Type de facture", "fieldtype": "Select", "options": "Any\nFV\nEV\nFT\nET\nFA\nEA", "default": "Any", "in_list_view": 1, "columns": 2, "description": "Any = tous les types."},
+  {"fieldname": "is_allowed", "label": "Autorisee", "fieldtype": "Check", "default": "1", "in_list_view": 1, "columns": 1},
+  {"fieldname": "rate_source", "label": "Source du taux", "fieldtype": "Select", "options": "ERPNext\nDGI Officiel\nManuel", "default": "ERPNext", "in_list_view": 1, "columns": 2, "description": "ERPNext = conversion_rate de la facture ; DGI Officiel = taux publie par la DGI (currencyRates) ; Manuel = valeur ci-contre."},
+  {"fieldname": "manual_rate", "label": "Taux manuel (CDF/1 unite)", "fieldtype": "Float", "precision": "6", "in_list_view": 1, "columns": 2, "depends_on": "eval:doc.rate_source=='Manuel'"},
+  {"fieldname": "notes", "label": "Notes", "fieldtype": "Data", "columns": 2}
+ ],
+ "permissions": []
+}

@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "DGI Compliance"
 app_description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe)"
-app_version = "3.1.1"
+app_version = "3.2.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -20,6 +20,7 @@ doc_events = {
             "dgi_compliance.edef.tasks.enforce_return_invoice_type",
             "dgi_compliance.edef.rounding.apply_vat_ceiling",
             "dgi_compliance.edef.matrix.validate_sales_invoice",
+            "dgi_compliance.edef.matrix.validate_currency",
             "dgi_compliance.edef.tasks.manage_draft_normalization_status",
         ],
         "before_submit": "dgi_compliance.edef.tasks.before_sales_invoice_submit",
@@ -39,6 +40,8 @@ jinja = {
         "dgi_compliance.edef.printutils.dgi_item_tax_group",
         "dgi_compliance.edef.printutils.dgi_invoice_lines",
         "dgi_compliance.edef.printutils.dgi_totals",
+        "dgi_compliance.edef.printutils.dgi_is_foreign",
+        "dgi_compliance.edef.printutils.dgi_cur_rate",
     ],
 }
 

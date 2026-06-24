@@ -6,3 +6,4 @@ dgi_compliance.patches.v2_0.seed_mapping_and_matrix
 dgi_compliance.patches.v3_0.cleanup_legacy_fields
 dgi_compliance.patches.v3_1.fix_invalid_link_fields
 dgi_compliance.patches.v3_1.set_default_print_format
+dgi_compliance.patches.v3_2.seed_currency_rules

@@ -161,11 +161,26 @@ def _foreign_ccy(doc):
 
 
 def _cur_rate(doc):
-    """Exchange rate to send: CDF per 1 unit of the foreign currency (= ERPNext conversion_rate).
-    The DGI derives the foreign value as CDF_total / curRate. Robust fallbacks:
+    """Exchange rate to send: CDF per 1 unit of the foreign currency.
+    The DGI derives the foreign value as CDF_total / curRate.
+
+    Source resolution (in order):
+      0) the currency matrix rule (Settings -> Currency Rules) for this currency/type:
+         Manuel -> manual_rate ; DGI Officiel -> published rate ; ERPNext -> conversion_rate;
       1) doc.conversion_rate (the rate actually used on the invoice);
-      2) base_grand_total / grand_total (recomputed from the document);
+      2) base_grand_total / grand_total (recomputed);
       3) the DGI official published rate (DGI Reference Value 'Currency Rate::<CCY>')."""
+    ccy = doc.get("currency")
+    settings = get_settings()
+    rule = settings.currency_rule_for(ccy, _invoice_type(doc, settings))
+    if rule:
+        src = (rule.get("rate_source") or "ERPNext")
+        if src == "Manuel" and float(rule.get("manual_rate") or 0) > 0:
+            return float(rule.get("manual_rate"))
+        if src in ("DGI Officiel", "DGI Official"):
+            off = frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value")
+            if off:
+                return float(off)
     rate = float(doc.get("conversion_rate") or 0)
     if rate > 0:
         return rate
@@ -173,7 +188,6 @@ def _cur_rate(doc):
     bgt = abs(float(doc.get("base_grand_total") or 0))
     if gt:
         return round(bgt / gt, 6)
-    ccy = doc.get("currency")
     official = frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value")
     return float(official or 0)
 
