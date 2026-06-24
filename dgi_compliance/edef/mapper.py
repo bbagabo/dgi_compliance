@@ -108,10 +108,19 @@ def _payments(doc, settings):
     rows = doc.get("payments") or []
     if not rows:
         return None
-    return [{
-        "name": settings.payment_type_for(p.mode_of_payment),
-        "amount": abs(float(p.base_amount or 0)),  # CDF (abs: returns/credit notes stay positive for DGI)
-    } for p in rows]
+    ccy = _foreign_ccy(doc)
+    rate = _cur_rate(doc) if ccy else None
+    out = []
+    for p in rows:
+        row = {
+            "name": settings.payment_type_for(p.mode_of_payment),
+            "amount": abs(float(p.base_amount or 0)),  # CDF (abs: returns stay positive for DGI)
+        }
+        if ccy:
+            row["curCode"] = ccy
+            row["curRate"] = rate
+        out.append(row)
+    return out
 
 
 def _item_edef_type(item_code):
@@ -138,15 +147,45 @@ def _items(doc, settings, mode):
     return out
 
 
-def _currency_block(doc, dto):
+def _foreign_ccy(doc):
+    """Return the invoice (transaction) currency when it differs from the local currency (CDF).
+
+    The e-DEF API works in LCY = CDF: all amounts we send are CDF (base_* fields). When the invoice
+    is issued in a foreign currency, we additionally send curCode/curRate/curDate so the DGI can
+    display the indicative foreign-currency total. Returns None for a CDF (local) invoice."""
     company_ccy = frappe.get_cached_value("Company", doc.company, "default_currency")
     ccy = doc.get("currency")
-    # Amounts are already CDF; curCode/curRate let the DGI display the indicative foreign total.
     if ccy and ccy not in (company_ccy, "CDF"):
-        dto["curCode"] = ccy
-        dto["curRate"] = float(doc.get("conversion_rate") or 0)
-        dt = get_datetime(f"{doc.posting_date} {doc.get('posting_time') or '00:00:00'}")
-        dto["curDate"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+        return ccy
+    return None
+
+
+def _cur_rate(doc):
+    """Exchange rate to send: CDF per 1 unit of the foreign currency (= ERPNext conversion_rate).
+    The DGI derives the foreign value as CDF_total / curRate. Robust fallbacks:
+      1) doc.conversion_rate (the rate actually used on the invoice);
+      2) base_grand_total / grand_total (recomputed from the document);
+      3) the DGI official published rate (DGI Reference Value 'Currency Rate::<CCY>')."""
+    rate = float(doc.get("conversion_rate") or 0)
+    if rate > 0:
+        return rate
+    gt = abs(float(doc.get("grand_total") or 0))
+    bgt = abs(float(doc.get("base_grand_total") or 0))
+    if gt:
+        return round(bgt / gt, 6)
+    ccy = doc.get("currency")
+    official = frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value")
+    return float(official or 0)
+
+
+def _currency_block(doc, dto):
+    ccy = _foreign_ccy(doc)
+    if not ccy:
+        return
+    dto["curCode"] = ccy
+    dto["curRate"] = _cur_rate(doc)
+    dt = get_datetime(f"{doc.posting_date} {doc.get('posting_time') or '00:00:00'}")
+    dto["curDate"] = dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def build_invoice_request(doc):

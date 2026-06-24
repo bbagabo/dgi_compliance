@@ -233,8 +233,27 @@ def seed_all(force: bool = False) -> dict:
     }
 
 
+def set_default_print_format():
+    """Make 'DGI Sales Invoice' the default Print Format for Sales Invoice, via a Property Setter
+    (DocType-level 'default_print_format'). This is the standard, upgrade-safe Frappe mechanism:
+    it does NOT modify any ERPNext core file, GL, stock or validation - it only changes which
+    print format is pre-selected. Reversible by deleting the Property Setter."""
+    if not frappe.db.exists("Print Format", "DGI Sales Invoice"):
+        return {"skipped": "print format missing"}
+    try:
+        from frappe.custom.doctype.property_setter.property_setter import make_property_setter
+        make_property_setter("Sales Invoice", None, "default_print_format", "DGI Sales Invoice",
+                             "Data", for_doctype=True, validate_fields_for_doctype=False)
+        frappe.db.commit()
+        return {"default_print_format": "DGI Sales Invoice"}
+    except Exception as e:
+        frappe.log_error(title="[DGI] set_default_print_format", message=str(e))
+        return {"error": str(e)}
+
+
 def after_install():
     seed_static_catalogs()
     seed_mapping_doctypes()
     seed_customer_type_mapping()
     seed_validation_matrix()
+    set_default_print_format()
