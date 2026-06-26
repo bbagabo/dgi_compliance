@@ -47,7 +47,8 @@
   "label": "Reference d'origine (Code DEF/DGI)",
   "fieldtype": "Data",
   "insert_after": "custom_dgi_input_cb",
-  "description": "Obligatoire pour les avoirs (FA/EA). Repris de la facture d'origine si liee."
+  "description": "Obligatoire pour les avoirs (FA/EA). Repris de la facture d'origine si liee.",
+  "depends_on": "eval:doc.is_return || ['FA','EA'].includes(doc.dgi_invoice_type)"
  },
  {
   "doctype": "Custom Field",
@@ -58,7 +59,8 @@
   "fieldtype": "Select",
   "options": "\nCOR\nRAN\nRAM\nRRR",
   "insert_after": "custom_dgi_reference",
-  "description": "COR=Correction, RAN=Annulation, RAM=Avoir suite reprise, RRR=Remise/ristourne/rabais (Matrice F)."
+  "description": "COR=Correction, RAN=Annulation, RAM=Avoir suite reprise, RRR=Remise/ristourne/rabais (Matrice F).",
+  "depends_on": "eval:doc.is_return || ['FA','EA'].includes(doc.dgi_invoice_type)"
  },
  {
   "doctype": "Custom Field",
@@ -67,7 +69,8 @@
   "fieldname": "custom_dgi_reference_desc",
   "label": "Description reference",
   "fieldtype": "Data",
-  "insert_after": "custom_dgi_reference_type"
+  "insert_after": "custom_dgi_reference_type",
+  "depends_on": "eval:doc.is_return || ['FA','EA'].includes(doc.dgi_invoice_type)"
  },
  {
   "doctype": "Custom Field",
