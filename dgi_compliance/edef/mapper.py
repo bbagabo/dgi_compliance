@@ -134,16 +134,25 @@ def _item_edef_type(item_code):
 
 
 def _items(doc, settings, mode):
+    send_disc = bool(getattr(settings, "send_line_discounts", 1))
     out = []
     for it in (doc.get("items") or []):
-        out.append({
+        price = _item_rate_cdf(it, mode)  # net unit price (CDF), drives the DGI total
+        row = {
             "code": it.get("item_code") or None,
             "name": it.get("item_name") or it.get("description") or "ARTICLE",
             "type": _item_edef_type(it.get("item_code")),
-            "price": _item_rate_cdf(it, mode),
+            "price": price,
             "quantity": abs(float(it.qty or 0)),
             "taxGroup": settings.tax_group_for(it.get("item_tax_template"), None),
-        })
+        }
+        # Line discount: send the gross unit price as originalPrice so the DGI shows the rebate.
+        # The net price still drives the total, so the reconciliation is unaffected.
+        if send_disc:
+            gross = abs(float(it.get("base_price_list_rate") or 0))
+            if gross and gross > price + 0.01:
+                row["originalPrice"] = gross
+        out.append(row)
     return out
 
 

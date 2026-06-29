@@ -224,6 +224,11 @@ def evaluate_invoice_type_context(doc, settings=None):
     if it in STANDARD_TYPES and is_return:
         block(_("Type {0} incompatible avec un retour ERPNext (utilisez FA/EA).").format(it))
 
+    # A credit nature (rabais RRR, correction, annulation...) requires an avoir type FA/EA.
+    if doc.get("custom_dgi_reference_type") and it not in CREDIT_TYPES:
+        block(_("Une 'Nature de l'avoir' ({0}) est renseignee: le type doit etre FA ou EA (type actuel: {1}).")
+              .format(doc.get("custom_dgi_reference_type"), it))
+
     # Export flag must be consistent with E* / F* family.
     if is_export and it not in EXPORT_TYPES:
         block(_("'Facture a l'exportation' cochee mais le type {0} n'est pas un type export (EV/ET/EA).").format(it))
@@ -259,8 +264,9 @@ def _customer_field_present(doc, key):
         return _present(doc.get("contact_email"))
     if key == "req_registration_no":
         reg = doc.get("customer") and frappe.db.get_value(
-            "Customer", doc.get("customer"), "tax_id")
-        return _present(doc.get("custom_dgi_registration_no") or reg)
+            "Customer", doc.get("customer"), "dgi_registration_no")
+        return _present(doc.get("custom_dgi_registration_no") or reg
+                        or (doc.get("customer") and frappe.db.get_value("Customer", doc.get("customer"), "tax_id")))
     return True
 
 

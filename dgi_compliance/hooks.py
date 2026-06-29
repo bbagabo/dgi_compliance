@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "DGI Compliance"
 app_description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe)"
-app_version = "3.2.1"
+app_version = "3.3.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -23,6 +23,7 @@ doc_events = {
             "dgi_compliance.edef.matrix.validate_currency",
             "dgi_compliance.edef.tasks.manage_draft_normalization_status",
         ],
+        "before_print": "dgi_compliance.edef.tasks.register_print",
         "before_submit": "dgi_compliance.edef.tasks.before_sales_invoice_submit",
         "on_submit": "dgi_compliance.edef.tasks.on_sales_invoice_submit",
         "on_cancel": "dgi_compliance.edef.tasks.on_sales_invoice_cancel",
@@ -40,6 +41,9 @@ jinja = {
         "dgi_compliance.edef.printutils.dgi_item_tax_group",
         "dgi_compliance.edef.printutils.dgi_invoice_lines",
         "dgi_compliance.edef.printutils.dgi_totals",
+        "dgi_compliance.edef.printutils.dgi_type_label",
+        "dgi_compliance.edef.printutils.dgi_client_registration",
+        "dgi_compliance.edef.printutils.dgi_print_label",
         "dgi_compliance.edef.printutils.dgi_is_foreign",
         "dgi_compliance.edef.printutils.dgi_cur_rate",
     ],
@@ -89,8 +93,12 @@ fixtures = [
             "Sales Invoice-custom_dgi_qr_image",
             "Sales Invoice-custom_dgi_exchange_je",
             "Sales Invoice-custom_dgi_error",
+            "Sales Invoice-custom_dgi_print_count",
+            "Sales Invoice-custom_dgi_first_printed_on",
+            "Sales Invoice-custom_dgi_last_printed_on",
             # Other DocTypes (upgrade-safe links)
             "Customer-dgi_customer_type",
+            "Customer-dgi_registration_no",
             "Item-dgi_item_type",
             "POS Profile-dgi_point_of_sale",
         ]]],

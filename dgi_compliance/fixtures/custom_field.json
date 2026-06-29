@@ -220,6 +220,44 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_print_count",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_print_count",
+  "label": "Compteur d'impressions DGI",
+  "fieldtype": "Int",
+  "insert_after": "custom_dgi_error",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1,
+  "default": "0",
+  "description": "Nombre d'impressions: 0/1 = Original, >=2 = Duplicata."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_first_printed_on",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_first_printed_on",
+  "label": "Premiere impression",
+  "fieldtype": "Datetime",
+  "insert_after": "custom_dgi_print_count",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_last_printed_on",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_last_printed_on",
+  "label": "Derniere impression",
+  "fieldtype": "Datetime",
+  "insert_after": "custom_dgi_first_printed_on",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Customer-dgi_customer_type",
   "dt": "Customer",
   "fieldname": "dgi_customer_type",
@@ -228,6 +266,16 @@
   "options": "DGI Customer Type",
   "insert_after": "tax_id",
   "description": "PP/PM/PC/PL/AO. Si vide, deduit du Customer Type natif via le mapping (DGI Settings). Determine les champs obligatoires (Matrice B)."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Customer-dgi_registration_no",
+  "dt": "Customer",
+  "fieldname": "dgi_registration_no",
+  "label": "N d'enregistrement (RCCM / Id. Nat.)",
+  "fieldtype": "Data",
+  "insert_after": "dgi_customer_type",
+  "description": "Numero d'enregistrement legal du client (RCCM ou Identification Nationale). Utilise par la Matrice B et affiche sur la facture normalisee."
  },
  {
   "doctype": "Custom Field",

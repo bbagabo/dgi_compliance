@@ -16,7 +16,7 @@ the dedicated report "Factures en attente de normalisation". The gate lives in `
 """
 import frappe
 from frappe import _
-from frappe.utils import nowdate, getdate, get_datetime, date_diff, flt
+from frappe.utils import nowdate, getdate, get_datetime, date_diff, flt, now_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef import client
 from dgi_compliance.edef.mapper import build_invoice_request, validate_invoice_request
@@ -87,6 +87,25 @@ def manage_draft_normalization_status(doc, method=None):
 
 
 # ---------------- Sales Invoice events ----------------
+
+def register_print(doc, method=None, *args, **kwargs):
+    """`before_print` hook: increment the print counter and stamp timestamps.
+    ORIGINAL on the first print, DUPLICATA afterwards. Never blocks printing (best-effort)."""
+    try:
+        settings = get_settings()
+        if not settings.enabled or doc.docstatus != 1:
+            return
+        count = int(doc.get("custom_dgi_print_count") or 0) + 1
+        now = now_datetime()
+        updates = {"custom_dgi_print_count": count, "custom_dgi_last_printed_on": now}
+        if count == 1:
+            updates["custom_dgi_first_printed_on"] = now
+        for k, v in updates.items():
+            doc.set(k, v)  # reflect on the in-memory doc so the current render shows the label
+        doc.db_set(updates, update_modified=False)
+    except Exception:
+        pass
+
 
 def before_sales_invoice_submit(doc, method=None):
     """Posting gate: block submit unless the invoice is normalized (see module docstring)."""
