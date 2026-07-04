@@ -127,7 +127,11 @@ def resolve_item_type(item_code):
     return "SER" if is_stock == 0 else "BIE"
 
 
-def resolve_tax_group(doc_item, settings):
+def resolve_tax_group(doc_item, settings, doc=None):
+    """Tax group used by the validation matrices. Non-strict: falls back to the default
+    group so matrix checks never crash; the strict mapping check lives in the mapper."""
+    if doc is not None:
+        return settings.tax_group_for_invoice(doc, doc_item) or (settings.default_tax_group or "A")
     return settings.tax_group_for(doc_item.get("item_tax_template"), None)
 
 
@@ -351,7 +355,7 @@ def collect_violations(doc, settings=None):
     # Matrices D, E, F - per line
     for it in (doc.get("items") or []):
         item_type = resolve_item_type(it.get("item_code"))
-        tax_group = resolve_tax_group(it, settings)
+        tax_group = resolve_tax_group(it, settings, doc)
         line = f"#{it.get('idx')} {it.get('item_code') or it.get('item_name') or ''}".strip()
 
         vd = _decide(MATRIX_D, {"item_type": item_type, "tax_group": tax_group},

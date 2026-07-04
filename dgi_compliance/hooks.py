@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "DGI Compliance"
 app_description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe)"
-app_version = "3.3.0"
+app_version = "3.4.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -81,6 +81,17 @@ fixtures = [
             "Sales Invoice-custom_dgi_reference_type",
             "Sales Invoice-custom_dgi_reference_desc",
             "Sales Invoice-dgi_validation_override",
+            # Sales Invoice - commentaires normalises A-H (payload e-MCF cmta..cmth)
+            "Sales Invoice-custom_dgi_comments_section",
+            "Sales Invoice-dgi_comment_a",
+            "Sales Invoice-dgi_comment_b",
+            "Sales Invoice-dgi_comment_c",
+            "Sales Invoice-dgi_comment_d",
+            "Sales Invoice-custom_dgi_comments_cb",
+            "Sales Invoice-dgi_comment_e",
+            "Sales Invoice-dgi_comment_f",
+            "Sales Invoice-dgi_comment_g",
+            "Sales Invoice-dgi_comment_h",
             # Sales Invoice - normalization results
             "Sales Invoice-dgi_section",
             "Sales Invoice-custom_dgi_status",

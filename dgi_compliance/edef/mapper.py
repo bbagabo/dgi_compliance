@@ -13,11 +13,17 @@ Field references (standard ERPNext, no core change):
   Sales Invoice Payment (.payments, POS): mode_of_payment, base_amount
 """
 import frappe
+from frappe import _
 from frappe.utils import get_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 
 INVOICE_TYPES = ("FV", "FT", "FA", "EV", "ET", "EA")
 TAX_GROUPS = set("ABCDEFGHIJKLMNOP")
+COMMENT_LETTERS = "abcdefgh"  # cmta..cmth = Commentaire A..H (protocole e-MCF v1.3)
+
+
+class TaxGroupMappingError(frappe.ValidationError):
+    """A tax is specified on the invoice but has no Tax Group mapping (A-P)."""
 
 
 def _seller_nif(doc, settings):
@@ -133,25 +139,47 @@ def _item_edef_type(item_code):
     return "SER" if frappe.db.get_value("Item", item_code, "is_stock_item") == 0 else "BIE"
 
 
+def _resolve_tax_group_strict(doc, it, settings):
+    """Resolve the e-DEF Tax Group via the mapping (line Item Tax Template first, then the
+    invoice-level Sales Taxes and Charges Template). The Default Tax Group is used ONLY when
+    no tax is specified on the invoice; a specified-but-unmapped tax raises an explicit error
+    (the default must never override / stand in for a missing mapping)."""
+    grp = settings.tax_group_for_invoice(doc, it, strict=True)
+    if grp:
+        return grp
+    tpl = it.get("item_tax_template") or doc.get("taxes_and_charges") or "les taxes de la facture"
+    frappe.throw(
+        _("Mapping Tax Group manquant pour '{0}' (ligne #{1}). Ajoutez la correspondance dans "
+          "DGI Compliance Settings > Tax Group Mapping (Modele Taxes et Frais de Vente ou "
+          "Modele de taxe d'article -> groupe A-P). Le Default Tax Group ne s'applique que "
+          "lorsqu'aucune taxe n'est specifiee sur la facture.").format(tpl, it.get("idx") or "?"),
+        exc=TaxGroupMappingError, title=_("Mapping Tax Group DGI"))
+
+
 def _items(doc, settings, mode):
     send_disc = bool(getattr(settings, "send_line_discounts", 1))
     out = []
     for it in (doc.get("items") or []):
-        price = _item_rate_cdf(it, mode)  # net unit price (CDF), drives the DGI total
+        price = _item_rate_cdf(it, mode)  # net unit price AFTER discount (CDF), drives the DGI total
         row = {
             "code": it.get("item_code") or None,
             "name": it.get("item_name") or it.get("description") or "ARTICLE",
             "type": _item_edef_type(it.get("item_code")),
             "price": price,
             "quantity": abs(float(it.qty or 0)),
-            "taxGroup": settings.tax_group_for(it.get("item_tax_template"), None),
+            "taxGroup": _resolve_tax_group_strict(doc, it, settings),
         }
-        # Line discount: send the gross unit price as originalPrice so the DGI shows the rebate.
-        # The net price still drives the total, so the reconciliation is unaffected.
+        # Discount (protocole e-MCF v1.3): ItemDto.price = prix net APRES remise (= ERPNext);
+        # originalPrice = prix d'origine AVANT remise (valeur absolue, sans reduction);
+        # priceModification = description de la modification (ex. 'Remise 10%').
+        # The net price still drives the DGI total, so the reconciliation is unaffected.
         if send_disc:
             gross = abs(float(it.get("base_price_list_rate") or 0))
-            if gross and gross > price + 0.01:
+            if gross and gross > price + 0.005:
                 row["originalPrice"] = gross
+                pct = float(it.get("discount_percentage") or 0)
+                row["priceModification"] = (
+                    "Remise {0}%".format(("%g" % pct)) if pct > 0 else "Remise")
         out.append(row)
     return out
 
@@ -236,6 +264,11 @@ def build_invoice_request(doc):
         dto["reference"] = doc.get("custom_dgi_reference") or ref_code
         dto["referenceType"] = doc.get("custom_dgi_reference_type")
         dto["referenceDesc"] = doc.get("custom_dgi_reference_desc")
+    # Commentaires normalises A-H -> cmta..cmth (protocole e-MCF v1.3, lignes optionnelles)
+    for letter in COMMENT_LETTERS:
+        val = (doc.get("dgi_comment_" + letter) or "").strip()
+        if val:
+            dto["cmt" + letter] = val
     _currency_block(doc, dto)
     return dto
 
@@ -267,6 +300,8 @@ def validate_invoice_request(dto):
             errors.append(f"items[{i}].price invalide")
         if not (it.get("quantity", 0) > 0):
             errors.append(f"items[{i}].quantity doit etre > 0")
+        if it.get("originalPrice") is not None and float(it.get("originalPrice") or 0) < float(it.get("price") or 0):
+            errors.append(f"items[{i}].originalPrice doit etre >= price (prix avant remise)")
     if not (dto.get("operator") or {}).get("name"):
         errors.append("operator.name manquant")
     client = dto.get("client") or {}

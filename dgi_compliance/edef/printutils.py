@@ -97,9 +97,12 @@ def dgi_item_type(item_code) -> str:
     return "SER" if frappe.db.get_value("Item", item_code, "is_stock_item") == 0 else "BIE"
 
 
-def dgi_item_tax_group(item_tax_template=None) -> str:
+def dgi_item_tax_group(item_tax_template=None, doc=None) -> str:
     try:
-        return get_settings().tax_group_for(item_tax_template, None)
+        settings = get_settings()
+        if doc is not None:
+            return settings.tax_group_for_invoice(doc, {"item_tax_template": item_tax_template}) or ""
+        return settings.tax_group_for(item_tax_template, None)
     except Exception:
         return ""
 
@@ -123,7 +126,7 @@ def dgi_invoice_lines(doc):
         grp = ""
         if settings:
             try:
-                grp = settings.tax_group_for(it.get("item_tax_template"), None) or ""
+                grp = settings.tax_group_for_invoice(doc, it) or ""
             except Exception:
                 grp = ""
         rate = None
@@ -200,7 +203,7 @@ def dgi_tax_summary(doc):
         return []
     groups = {}
     for it in (doc.get("items") or []):
-        tg = settings.tax_group_for(it.get("item_tax_template"), None) or (settings.default_tax_group or "A")
+        tg = settings.tax_group_for_invoice(doc, it) or (settings.default_tax_group or "A")
         base = abs(flt(it.get("net_amount")))
         g = groups.setdefault(tg, {"group": tg, "base": 0.0, "rate": 0.0, "vat": 0.0})
         g["base"] += base

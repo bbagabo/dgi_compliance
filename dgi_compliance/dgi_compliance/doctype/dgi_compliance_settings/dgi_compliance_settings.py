@@ -28,6 +28,7 @@ class DGIComplianceSettings(Document):
         return self.default_payment_type or "ESPECES"
 
     def tax_group_for(self, item_tax_template: str | None, rate: float | None) -> str:
+        """Legacy resolution (line template / rate only). Prefer tax_group_for_invoice()."""
         for row in (self.tax_group_map or []):
             if item_tax_template and row.item_tax_template == item_tax_template:
                 return row.edef_tax_group
@@ -35,6 +36,50 @@ class DGIComplianceSettings(Document):
             for row in (self.tax_group_map or []):
                 if not row.item_tax_template and row.tax_rate is not None and abs(float(row.tax_rate) - float(rate)) < 1e-6:
                     return row.edef_tax_group
+        return self.default_tax_group or "A"
+
+    def tax_group_for_invoice(self, doc, item=None, strict: bool = False) -> str | None:
+        """v3.4 resolution of the e-DEF Tax Group (A-P) for an invoice line.
+
+        Order (an existing mapping ALWAYS wins over the default group):
+          1. Item Tax Template of the LINE      -> mapped e-DEF Tax Group;
+          2. Sales Taxes and Charges Template
+             of the INVOICE (taxes_and_charges) -> mapped e-DEF Tax Group;
+          3. Default Tax Group ONLY when NO tax is specified on the invoice
+             (no line template, no invoice template, no tax rows).
+
+        strict=True: when a tax IS specified but has no mapping, return None so the
+        caller can raise an explicit error instead of silently sending the default.
+        """
+        def get(d, k):
+            if d is None:
+                return None
+            return d.get(k) if isinstance(d, dict) else (d.get(k) if hasattr(d, "get") else getattr(d, k, None))
+
+        itt = get(item, "item_tax_template")
+        stt = get(doc, "taxes_and_charges")
+
+        # 1) line-level mapping (Item Tax Template) has priority
+        if itt:
+            for row in (self.tax_group_map or []):
+                if row.item_tax_template and row.item_tax_template == itt:
+                    return row.edef_tax_group
+
+        # 2) invoice-level mapping (Sales Taxes and Charges Template)
+        if stt:
+            for row in (self.tax_group_map or []):
+                tpl = row.get("sales_taxes_template") if hasattr(row, "get") else getattr(row, "sales_taxes_template", None)
+                if tpl and tpl == stt:
+                    return row.edef_tax_group
+
+        # 3) default group only when no tax is specified at all
+        has_tax_rows = bool(get(doc, "taxes") or [])
+        if not itt and not stt and not has_tax_rows:
+            return self.default_tax_group or "A"
+
+        # A tax exists on the invoice but no mapping matches.
+        if strict:
+            return None
         return self.default_tax_group or "A"
 
     # ---- Native Customer Type <-> DGI Type mapping (Matrix G) ----

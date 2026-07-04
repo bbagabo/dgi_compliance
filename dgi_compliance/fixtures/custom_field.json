@@ -85,12 +85,103 @@
  },
  {
   "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_comments_section",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_comments_section",
+  "fieldtype": "Section Break",
+  "insert_after": "dgi_validation_override",
+  "label": "DGI - Commentaires normalises (A-H)",
+  "collapsible": 1,
+  "description": "8 lignes de commentaires optionnelles transmises a la DGI dans le payload e-MCF (champs cmta a cmth du protocole v1.3) et affichees sur la facture normalisee."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_a",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_a",
+  "fieldtype": "Data",
+  "insert_after": "custom_dgi_comments_section",
+  "label": "Commentaire A"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_b",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_b",
+  "fieldtype": "Data",
+  "insert_after": "dgi_comment_a",
+  "label": "Commentaire B"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_c",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_c",
+  "fieldtype": "Data",
+  "insert_after": "dgi_comment_b",
+  "label": "Commentaire C"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_d",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_d",
+  "fieldtype": "Data",
+  "insert_after": "dgi_comment_c",
+  "label": "Commentaire D"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_comments_cb",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_comments_cb",
+  "fieldtype": "Column Break",
+  "insert_after": "dgi_comment_d"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_e",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_e",
+  "fieldtype": "Data",
+  "insert_after": "custom_dgi_comments_cb",
+  "label": "Commentaire E"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_f",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_f",
+  "fieldtype": "Data",
+  "insert_after": "dgi_comment_e",
+  "label": "Commentaire F"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_g",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_g",
+  "fieldtype": "Data",
+  "insert_after": "dgi_comment_f",
+  "label": "Commentaire G"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_comment_h",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_comment_h",
+  "fieldtype": "Data",
+  "insert_after": "dgi_comment_g",
+  "label": "Commentaire H"
+ },
+ {
+  "doctype": "Custom Field",
   "name": "Sales Invoice-dgi_section",
   "dt": "Sales Invoice",
   "fieldname": "dgi_section",
   "label": "Normalisation DGI (e-MCF)",
   "fieldtype": "Section Break",
-  "insert_after": "dgi_validation_override",
+  "insert_after": "dgi_comment_h",
   "collapsible": 1
  },
  {
@@ -230,7 +321,9 @@
   "allow_on_submit": 1,
   "no_copy": 1,
   "default": "0",
-  "description": "Nombre d'impressions: 0/1 = Original, >=2 = Duplicata."
+  "description": "Nombre d'impressions: 0/1 = Original, >=2 = Duplicata.",
+  "hidden": 1,
+  "print_hide": 1
  },
  {
   "doctype": "Custom Field",

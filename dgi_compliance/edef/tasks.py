@@ -19,7 +19,7 @@ from frappe import _
 from frappe.utils import nowdate, getdate, get_datetime, date_diff, flt, now_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef import client
-from dgi_compliance.edef.mapper import build_invoice_request, validate_invoice_request
+from dgi_compliance.edef.mapper import build_invoice_request, validate_invoice_request, TaxGroupMappingError, COMMENT_LETTERS
 from dgi_compliance.edef.rounding import doc_vat_base
 from dgi_compliance.edef.qr import make_qr_data_uri
 from dgi_compliance.edef.audit import log_exchange
@@ -72,7 +72,8 @@ def manage_draft_normalization_status(doc, method=None):
         changed = (doc.has_value_changed("base_grand_total")
                    or doc.has_value_changed("grand_total")
                    or doc.has_value_changed("dgi_invoice_type")
-                   or doc.has_value_changed("custom_dgi_export"))
+                   or doc.has_value_changed("custom_dgi_export")
+                   or any(doc.has_value_changed("dgi_comment_" + l) for l in COMMENT_LETTERS))
         if changed:
             doc.custom_dgi_status = "Pending"
             for f in _RESULT_FIELDS:
@@ -210,7 +211,13 @@ def retry_normalization(invoice: str) -> dict:
 def normalize_invoice(doc, settings=None):
     settings = settings or get_settings()
 
-    dto = build_invoice_request(doc)
+    try:
+        dto = build_invoice_request(doc)
+    except TaxGroupMappingError as e:
+        msg = str(e)
+        _mark_error(doc, msg)
+        log_exchange("validate", {"invoice": doc.name}, None, msg, reference_invoice=doc.name)
+        raise
     errors = validate_invoice_request(dto)
     if errors:
         _mark_error(doc, "; ".join(errors))
