@@ -1,0 +1,28 @@
+{
+ "doctype": "DocType", "name": "DGI Invoice Type", "module": "DGI Compliance",
+ "custom": 0, "engine": "InnoDB", "autoname": "field:code", "track_changes": 1,
+ "title_field": "description",
+ "fields": [
+  {"fieldname": "code", "label": "Code (e-DEF)", "fieldtype": "Data", "unique": 1, "reqd": 1, "in_list_view": 1, "description": "FV, FT, FA, EV, ET, EA"},
+  {"fieldname": "description", "label": "Description", "fieldtype": "Data", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "is_active", "label": "Actif", "fieldtype": "Check", "default": "1", "in_list_view": 1},
+  {"fieldname": "cb_1", "fieldtype": "Column Break"},
+  {"fieldname": "source", "label": "Source", "fieldtype": "Select", "options": "Static\nAPI\nManual", "default": "Static", "in_list_view": 1},
+  {"fieldname": "manual_override", "label": "Verrouiller (override manuel)", "fieldtype": "Check", "default": "0"},
+  {"fieldname": "last_synced", "label": "Derniere synchro", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "sync_status", "label": "Statut synchro", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "sb_behav", "label": "Comportement", "fieldtype": "Section Break", "description": "Pilote la logique de validation et de mapping (Matrices C, E, F)."},
+  {"fieldname": "is_export", "label": "Exportation (E*)", "fieldtype": "Check", "default": "0", "description": "EV, ET, EA."},
+  {"fieldname": "is_prepayment", "label": "Acompte / avance (FT/ET)", "fieldtype": "Check", "default": "0", "description": "Soumis a la Matrice E (Acompte vs Type d'article)."},
+  {"fieldname": "is_credit_note", "label": "Avoir (FA/EA)", "fieldtype": "Check", "default": "0", "description": "Soumis a la Matrice F (Nature avoir vs Type d'article)."},
+  {"fieldname": "cb_2", "fieldtype": "Column Break"},
+  {"fieldname": "requires_reference", "label": "Reference d'origine obligatoire", "fieldtype": "Check", "default": "0", "description": "Code DEF/DGI de la facture d'origine requis (FA/EA)."},
+  {"fieldname": "sb_notes", "label": "Notes", "fieldtype": "Section Break"},
+  {"fieldname": "notes", "label": "Notes", "fieldtype": "Small Text"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1},
+  {"role": "Accounts User", "read": 1}
+ ]
+}

@@ -1,0 +1,29 @@
+{
+ "doctype": "DocType", "name": "DGI Point of Sale", "module": "DGI Compliance",
+ "custom": 0, "engine": "InnoDB", "autoname": "field:pos_name", "track_changes": 1,
+ "title_field": "pos_name",
+ "fields": [
+  {"fieldname": "pos_name", "label": "Point de vente", "fieldtype": "Data", "unique": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "nim", "label": "NIM (e-MCF)", "fieldtype": "Link", "options": "DGI EMCF", "in_list_view": 1, "description": "e-MCF rattache (synchronise depuis /api/info/status)."},
+  {"fieldname": "is_sales_location", "label": "Sales Location (lieu de vente)", "fieldtype": "Check", "default": "1", "in_list_view": 1, "description": "Matrice A: si coche, NID et Token deviennent obligatoires."},
+  {"fieldname": "is_active", "label": "Actif", "fieldtype": "Check", "default": "1"},
+  {"fieldname": "cb_1", "fieldtype": "Column Break"},
+  {"fieldname": "nid", "label": "NID", "fieldtype": "Data", "description": "Numero d'identification du point de vente."},
+  {"fieldname": "token", "label": "Token e-DEF (override)", "fieldtype": "Password", "description": "Optionnel: jeton specifique a ce point de vente. Si vide, le jeton global des Settings est utilise."},
+  {"fieldname": "nid_requirement", "label": "NID requis", "fieldtype": "Select", "options": "Optional\nMandatory", "default": "Mandatory", "description": "Calcule depuis la Matrice A selon 'Sales Location'; modifiable."},
+  {"fieldname": "token_requirement", "label": "Token requis", "fieldtype": "Select", "options": "Optional\nMandatory", "default": "Mandatory"},
+  {"fieldname": "sb_api", "label": "Statut & Synchro", "fieldtype": "Section Break"},
+  {"fieldname": "api_status", "label": "Statut e-MCF", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "last_synced", "label": "Derniere synchro", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "cb_2", "fieldtype": "Column Break"},
+  {"fieldname": "sync_status", "label": "Statut synchro", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "source", "label": "Source", "fieldtype": "Select", "options": "Manual\nAPI", "default": "Manual"},
+  {"fieldname": "sb_notes", "label": "Notes", "fieldtype": "Section Break"},
+  {"fieldname": "notes", "label": "Notes", "fieldtype": "Small Text"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1},
+  {"role": "Accounts User", "read": 1}
+ ]
+}

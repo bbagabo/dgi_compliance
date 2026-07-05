@@ -1,0 +1,9 @@
+{
+ "doctype": "DocType", "name": "DGI Payment Mode Map", "module": "DGI Compliance",
+ "istable": 1, "custom": 0, "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "erpnext_mode_of_payment", "label": "ERPNext Mode of Payment", "fieldtype": "Link", "options": "Mode of Payment", "in_list_view": 1, "columns": 6, "reqd": 1},
+  {"fieldname": "edef_payment_type", "label": "e-DEF Payment Type", "fieldtype": "Select", "options": "ESPECES\nVIREMENT\nCARTEBANCAIRE\nMOBILEMONEY\nCHEQUES\nCREDIT\nAUTRE", "in_list_view": 1, "columns": 6, "reqd": 1}
+ ],
+ "permissions": []
+}

@@ -1,0 +1,22 @@
+{
+ "doctype": "Report",
+ "name": "Factures en attente de normalisation",
+ "report_name": "Factures en attente de normalisation",
+ "ref_doctype": "Sales Invoice",
+ "module": "DGI Compliance",
+ "is_standard": "Yes",
+ "report_type": "Query Report",
+ "disabled": 0,
+ "disable_prepared_report": 0,
+ "prepared_report": 0,
+ "add_total_row": 0,
+ "columns": [],
+ "filters": [],
+ "letter_head": null,
+ "query": "SELECT name AS \"Facture:Link/Sales Invoice:200\", customer AS \"Client:Link/Customer:200\", posting_date AS \"Date:Date:100\", base_grand_total AS \"Total (CDF):Currency:140\", IFNULL(custom_dgi_status, 'Pending') AS \"Statut DGI:Data:120\", custom_dgi_error AS \"Erreur DGI:Data:320\", owner AS \"Cree par:Data:160\" FROM `tabSales Invoice` WHERE docstatus = 0 AND IFNULL(custom_dgi_status, '') != 'Normalized' ORDER BY posting_date DESC, modified DESC",
+ "roles": [
+  {"role": "System Manager"},
+  {"role": "Accounts Manager"},
+  {"role": "Accounts User"}
+ ]
+}

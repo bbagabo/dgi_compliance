@@ -1,0 +1,10 @@
+{
+ "doctype": "DocType", "name": "DGI Customer Type Mapping", "module": "DGI Compliance",
+ "istable": 1, "custom": 0, "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "erpnext_customer_type", "label": "Customer Type (ERPNext natif)", "fieldtype": "Data", "in_list_view": 1, "columns": 4, "reqd": 1, "description": "Valeur exacte du champ natif Customer.customer_type (ex.: Company, Individual)."},
+  {"fieldname": "dgi_customer_type", "label": "Type DGI autorise", "fieldtype": "Link", "options": "DGI Customer Type", "in_list_view": 1, "columns": 4, "reqd": 1, "description": "Code DGI (PP/PM/PC/PL/AO) autorise pour ce Customer Type natif."},
+  {"fieldname": "is_default", "label": "Par defaut", "fieldtype": "Check", "in_list_view": 1, "columns": 2, "default": "0", "description": "Type DGI applique automatiquement quand la fiche client n'en precise pas (un seul defaut par Customer Type natif)."}
+ ],
+ "permissions": []
+}

@@ -1,0 +1,22 @@
+{
+ "doctype": "DocType", "name": "DGI Item Type", "module": "DGI Compliance",
+ "custom": 0, "engine": "InnoDB", "autoname": "field:code", "track_changes": 1,
+ "title_field": "description",
+ "fields": [
+  {"fieldname": "code", "label": "Code (e-DEF)", "fieldtype": "Data", "unique": 1, "reqd": 1, "in_list_view": 1, "description": "BIE=Biens, SER=Services, TAX=Taxes et redevances"},
+  {"fieldname": "description", "label": "Description", "fieldtype": "Data", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "is_active", "label": "Actif", "fieldtype": "Check", "default": "1", "in_list_view": 1},
+  {"fieldname": "cb_1", "fieldtype": "Column Break"},
+  {"fieldname": "source", "label": "Source", "fieldtype": "Select", "options": "Static\nAPI\nManual", "default": "Static", "in_list_view": 1, "description": "Static=constante protocole; API=synchronise; Manual=saisi."},
+  {"fieldname": "manual_override", "label": "Verrouiller (override manuel)", "fieldtype": "Check", "default": "0", "description": "Si coche, la synchro API ne remplace plus cette ligne."},
+  {"fieldname": "last_synced", "label": "Derniere synchro", "fieldtype": "Datetime", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "sync_status", "label": "Statut synchro", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "sb_notes", "label": "Notes", "fieldtype": "Section Break"},
+  {"fieldname": "notes", "label": "Notes", "fieldtype": "Small Text"}
+ ],
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Accounts Manager", "read": 1, "write": 1},
+  {"role": "Accounts User", "read": 1}
+ ]
+}
