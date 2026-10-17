@@ -52,7 +52,10 @@ frappe.ui.form.on("Sales Invoice", {
                     callback: (r) => {
                         frappe.dom.unfreeze();
                         const res = r.message || {};
-                        if (res.ok && (res.stage === "normalized" || res.stage === "pending")) {
+                        if (res.ok && res.stage === "queued-mcf") {
+                            // v4.0: MCF physique - le job part vers l'agent USB local.
+                            frappe.show_alert({ message: __("Envoye a l'agent MCF local (job {0}) - en attente du dispositif USB", [res.job || "?"]), indicator: "blue" });
+                        } else if (res.ok && (res.stage === "normalized" || res.stage === "pending")) {
                             frappe.show_alert({ message: __("Normalisation: {0}", [res.code_def || res.stage]), indicator: "green" });
                         } else {
                             frappe.msgprint({ title: __("Echec normalisation"), message: __("Etape: {0}", [res.stage || "?"]), indicator: "red" });

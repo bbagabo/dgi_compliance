@@ -37,6 +37,7 @@ def effective_priority(row) -> int:
 
 class DGIComplianceSettings(Document):
     def validate(self):
+        self._validate_communication_mode()
         # Security: warn (do not block) when the active e-DEF endpoint is not HTTPS.
         url = self.base_url()
         if url and not url.lower().startswith("https://"):
@@ -98,6 +99,32 @@ class DGIComplianceSettings(Document):
     def get_token(self) -> str:
         # Password fields are decrypted via get_password()
         return self.get_password("token", raise_exception=False) or ""
+
+    # ---- v4.0: communication mode (e-MCF API vs physical MCF over USB) ----
+
+    def is_mcf_mode(self) -> bool:
+        """True when the physical MCF (USB agent) is the active channel. While True, the
+        e-DEF HTTP client refuses every call (see edef/client.py) - strict mutual exclusion."""
+        return (self.get("communication_mode") or "E-MCF (API)") == "MCF Physique (USB)"
+
+    def _validate_communication_mode(self):
+        if not self.has_value_changed("communication_mode"):
+            return
+        if self.is_mcf_mode():
+            frappe.msgprint(
+                _("Mode MCF Physique (USB) active: toutes les communications e-MCF (API) sont "
+                  "desormais BLOQUEES (aucune requete/webhook vers la DGI). La normalisation "
+                  "passe par l'agent MCF local."),
+                indicator="orange", title=_("Mode de communication"))
+        else:
+            pending = frappe.db.count("DGI MCF Job", {"status": ["in", ["Queued", "In Progress"]]}) \
+                if frappe.db.table_exists("DGI MCF Job") else 0
+            msg = _("Mode E-MCF (API) active: l'agent MCF physique est desormais bloque "
+                    "(pull/push refuses).")
+            if pending:
+                msg += " " + _("Attention: {0} job(s) MCF en attente ne seront PAS traites; "
+                               "annulez-les ou re-normalisez ces factures via l'API.").format(pending)
+            frappe.msgprint(msg, indicator="orange", title=_("Mode de communication"))
 
     def payment_type_for(self, mode_of_payment: str, strict: bool = False) -> str | None:
         """Resolve the e-DEF payment type for an ERPNext Mode of Payment (v3.6).

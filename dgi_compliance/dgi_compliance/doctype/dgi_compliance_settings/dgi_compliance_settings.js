@@ -1,5 +1,29 @@
 frappe.ui.form.on("DGI Compliance Settings", {
     refresh(frm) {
+        // ---- v4.0: communication mode banner + MCF agent health ----
+        if (frm.doc.communication_mode === "MCF Physique (USB)") {
+            frm.dashboard.set_headline_alert(
+                __("Mode MCF Physique (USB) actif - toutes les communications e-MCF (API) sont bloquees. La normalisation passe par l'agent MCF local."),
+                "blue");
+            frm.add_custom_button(__("Etat de l'agent MCF"), () => {
+                const seen = frm.doc.mcf_agent_last_seen;
+                const mins = seen ? moment().diff(moment(seen), "minutes") : null;
+                frappe.msgprint({
+                    title: __("Agent MCF"),
+                    indicator: mins !== null && mins < 3 ? "green" : "red",
+                    message: (seen
+                        ? __("Dernier signe de vie: {0} (il y a {1} min)", [frappe.datetime.str_to_user(seen), mins])
+                        : __("Aucun heartbeat recu - l'agent n'a jamais contacte ce site.")) +
+                        "<br><pre style='white-space:pre-wrap'>" +
+                        frappe.utils.escape_html(frm.doc.mcf_agent_status || "") + "</pre>",
+                });
+            }, __("MCF"));
+            frm.add_custom_button(__("Jobs MCF"), () => frappe.set_route("List", "DGI MCF Job"), __("MCF"));
+        } else if (frm.doc.communication_mode) {
+            frm.dashboard.set_headline_alert(
+                __("Mode E-MCF (API) actif - l'agent MCF physique est bloque (pull/push refuses)."),
+                "green");
+        }
         const grp = __("DGI");
 
         const run = (method, args, freezeMsg, done) => {

@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "DGI Compliance"
 app_description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe)"
-app_version = "3.6.0"
+app_version = "4.0.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -70,6 +70,7 @@ default_log_clearing_doctypes = {
 # --- Custom Fields shipped as fixtures (upgrade-safe). Re-export with:
 #     bench --site <site> export-fixtures --app dgi_compliance ---
 fixtures = [
+    {"dt": "Role", "filters": [["name", "in", ["DGI MCF Agent"]]]},
     {
         "dt": "Custom Field",
         "filters": [["name", "in", [

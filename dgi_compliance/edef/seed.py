@@ -278,7 +278,15 @@ def set_default_print_format():
         return {"error": str(e)}
 
 
+def ensure_mcf_agent_role():
+    """v4.0: role used by the local MCF agent's API user (idempotent)."""
+    if not frappe.db.exists("Role", "DGI MCF Agent"):
+        frappe.get_doc({"doctype": "Role", "role_name": "DGI MCF Agent",
+                        "desk_access": 0}).insert(ignore_permissions=True)
+
+
 def after_install():
+    ensure_mcf_agent_role()
     seed_static_catalogs()
     seed_mapping_doctypes()
     seed_customer_type_mapping()

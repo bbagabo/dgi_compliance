@@ -290,6 +290,8 @@ def _should_run_today(settings) -> bool:
 
 
 def scheduled_sync():
+    if get_settings().is_mcf_mode():
+        return  # v4.0: MCF physique actif - aucune synchronisation API
     """Daily scheduler entry; runs only on the chosen cadence and when enabled."""
     settings = get_settings()
     if not settings.enabled or not settings.auto_sync_reference:

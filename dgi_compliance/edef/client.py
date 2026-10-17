@@ -42,6 +42,14 @@ def call(method: str, path: str, body: dict | None = None, retries: int | None =
     `retries`: max automatic retries on transient failures. Defaults to 2 for idempotent
     methods (GET/PUT), 0 for POST (create is not idempotent)."""
     s = get_settings()
+    # v4.0 HARD GUARD - mutual exclusion of channels: while the physical MCF (USB) mode is
+    # active, NO HTTP request may leave this server towards the DGI. Every caller already
+    # handles a not-ok result dict, so nothing breaks - the exchange is simply refused.
+    if getattr(s, "communication_mode", None) == "MCF Physique (USB)":
+        return {"ok": False, "status": 0, "data": None, "url": path,
+                "error": ("Mode MCF Physique (USB) actif: toute communication e-MCF (API) est "
+                          "bloquee. Repassez sur 'E-MCF (API)' dans DGI Compliance Settings "
+                          "pour reactiver l'API.")}
     base = s.base_url()
     token = s.get_token()
     if not token:

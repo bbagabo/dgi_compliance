@@ -14,30 +14,44 @@
    "default": "0"
   },
   {
+   "fieldname": "communication_mode",
+   "label": "Mode de communication DGI",
+   "fieldtype": "Select",
+   "options": "E-MCF (API)\nMCF Physique (USB)",
+   "default": "E-MCF (API)",
+   "reqd": 1,
+   "bold": 1,
+   "description": "EXCLUSIF: un seul canal actif a la fois. 'E-MCF (API)' = normalisation via l'API e-DEF (webhooks/HTTP). 'MCF Physique (USB)' = normalisation via le dispositif fiscal branche en USB (agent MCF local); dans ce mode, TOUTE communication API vers la DGI est bloquee."
+  },
+  {
    "fieldname": "environment",
    "label": "Environment",
    "fieldtype": "Select",
    "options": "Test\nProduction",
    "default": "Test",
-   "reqd": 1
+   "reqd": 1,
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
   },
   {
    "fieldname": "base_url_test",
    "label": "Base URL (Test)",
    "fieldtype": "Data",
-   "default": "https://developper.dgirdc.cd/edef"
+   "default": "https://developper.dgirdc.cd/edef",
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
   },
   {
    "fieldname": "base_url_production",
    "label": "Base URL (Production)",
    "fieldtype": "Data",
-   "default": "https://edef.dgirdc.cd"
+   "default": "https://edef.dgirdc.cd",
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
   },
   {
    "fieldname": "token",
    "label": "e-DEF JWT Token",
    "fieldtype": "Password",
-   "description": "Issued by the e-MCF management portal."
+   "description": "Issued by the e-MCF management portal.",
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
   },
   {
    "fieldname": "auth_scheme",
@@ -45,13 +59,15 @@
    "fieldtype": "Select",
    "options": "Bearer\nNone",
    "default": "Bearer",
-   "description": "Bearer => 'Authorization: Bearer <token>'. None => raw token."
+   "description": "Bearer => 'Authorization: Bearer <token>'. None => raw token.",
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
   },
   {
    "fieldname": "request_timeout",
    "label": "Request Timeout (s)",
    "fieldtype": "Int",
-   "default": "15"
+   "default": "15",
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
   },
   {
    "fieldname": "cb_1",
@@ -96,7 +112,52 @@
    "fieldname": "token_valid_until",
    "label": "Token Valid Until",
    "fieldtype": "Datetime",
-   "read_only": 1
+   "read_only": 1,
+   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+  },
+  {
+   "fieldname": "sb_mcf",
+   "fieldtype": "Section Break",
+   "label": "MCF Physique (USB)",
+   "depends_on": "eval:doc.communication_mode=='MCF Physique (USB)'"
+  },
+  {
+   "fieldname": "mcf_port",
+   "label": "Port COM (optionnel)",
+   "fieldtype": "Data",
+   "description": "Indice de port serie transmis a l'agent local (ex: COM3). Vide = l'agent detecte automatiquement le port USB du MCF (sondage C1h)."
+  },
+  {
+   "fieldname": "mcf_job_stale_minutes",
+   "label": "Job bloque apres (minutes)",
+   "fieldtype": "Int",
+   "default": "10",
+   "description": "Un job 'In Progress' plus vieux que ce delai est remis en file (agent plante/debranche)."
+  },
+  {
+   "fieldname": "mcf_totals_tolerance",
+   "label": "Tolerance totaux machine (CDF)",
+   "fieldtype": "Float",
+   "default": "1.0",
+   "description": "Ecart maximal tolere entre les totaux calcules (payload) et les totaux enregistres par le MCF (commande 33h) avant abandon du job."
+  },
+  {
+   "fieldname": "cb_mcf",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "mcf_agent_last_seen",
+   "label": "Agent: dernier signe de vie",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "no_copy": 1
+  },
+  {
+   "fieldname": "mcf_agent_status",
+   "label": "Agent: dernier etat (C1h/C2h)",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "sb_cur",

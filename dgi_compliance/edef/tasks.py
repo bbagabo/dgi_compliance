@@ -191,6 +191,16 @@ def on_sales_invoice_cancel(doc, method=None):
     settings = get_settings()
     if not settings.enabled:
         return
+    # v4.0: MCF physique - rien ne part vers la DGI; on annule les jobs locaux en attente.
+    if settings.is_mcf_mode():
+        from dgi_compliance.mcf.jobs import cancel_pending_jobs
+        cancel_pending_jobs(doc.name)
+        if doc.get("custom_dgi_status"):
+            doc.db_set("custom_dgi_status", "Cancelled", update_modified=False)
+        frappe.msgprint(_("Mode MCF Physique: aucune annulation n'est transmise a la DGI. Si la "
+                          "facture etait deja normalisee par le MCF, emettez un avoir (FA/EA) "
+                          "reference sur son Code DEF."), indicator="orange", title=_("DGI"))
+        return
     uid = doc.get("custom_dgi_uid")
     if not uid:
         return
@@ -255,6 +265,12 @@ def normalize_invoice(doc, settings=None):
         if db_status == "Normalized" and doc.get("custom_dgi_status") == "Normalized":
             return {"ok": True, "stage": "normalized", "uid": doc.get("custom_dgi_uid"),
                     "code_def": doc.get("custom_dgi_code_def")}
+
+    # v4.0: physical MCF mode - normalization is performed by the local USB agent.
+    # No e-DEF API call may leave the server while this mode is active (see client.py guard).
+    if settings.is_mcf_mode():
+        from dgi_compliance.mcf.jobs import queue_mcf_job
+        return queue_mcf_job(doc, settings)
 
     try:
         dto = build_invoice_request(doc)
@@ -434,6 +450,8 @@ def _should_run_today(settings):
 
 
 def check_token_expiry():
+    if get_settings().is_mcf_mode():
+        return  # v4.0: MCF physique actif - le token e-DEF est hors sujet
     settings = get_settings()
     if not settings.enabled or not _should_run_today(settings):
         return

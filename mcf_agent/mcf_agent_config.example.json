@@ -1,0 +1,10 @@
+{
+  "site_url": "https://votre-site.frappe.cloud",
+  "api_key": "CLE_API_DE_L_UTILISATEUR_AGENT",
+  "api_secret": "SECRET_API_DE_L_UTILISATEUR_AGENT",
+  "agent_id": "CAISSE-01",
+  "port": null,
+  "poll_seconds": 5,
+  "jobs_per_cycle": 1,
+  "max_attempts": 3
+}

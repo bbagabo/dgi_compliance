@@ -1,0 +1,9 @@
+[
+ {
+  "doctype": "Role",
+  "name": "DGI MCF Agent",
+  "role_name": "DGI MCF Agent",
+  "desk_access": 0,
+  "disabled": 0
+ }
+]
