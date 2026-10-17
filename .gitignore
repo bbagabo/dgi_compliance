@@ -5,3 +5,5 @@ __pycache__/
 node_modules/
 *.log
 .env
+
+mcf_agent/mcf_agent_config.json
