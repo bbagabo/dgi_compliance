@@ -217,7 +217,8 @@ def evaluate_invoice_type_context(doc, settings=None):
     # Returns / credit notes must be FA or EA, and conversely.
     if is_return and it not in CREDIT_TYPES:
         block(_("Un retour / avoir ERPNext doit etre de type FA ou EA (type actuel: {0}).").format(it))
-    if it in CREDIT_TYPES and not (doc.get("return_against") or doc.get("custom_dgi_reference")):
+    if it in CREDIT_TYPES and not (doc.get("return_against") or doc.get("custom_dgi_reference")
+                                   or (doc.get("custom_dgi_reference_type") or "").upper() == "RRR"):
         block(_("Type {0} (avoir): la reference d'origine (Code DEF/DGI) ou la facture liee est obligatoire.").format(it))
 
     # Prepayment types are never returns.
@@ -322,6 +323,91 @@ def evaluate_point_of_sale(doc):
 
 
 # --------------------------------------------------------------------------- #
+# v5.0.0 - legal controls (not overridable)
+# --------------------------------------------------------------------------- #
+
+def _hard(matrix, msg, rule=None):
+    return {"matrix": matrix, "enforcement": "Block", "message": msg, "rule": rule, "hard": True}
+
+
+def evaluate_line_amounts(doc):
+    """SFE 1.1.21/1.1.22: no line, and no invoice, with a nil or negative amount."""
+    out = []
+    for it in (doc.get("items") or []):
+        if not flt(it.get("qty")) or not (abs(flt(it.get("rate"))) > 0) or not abs(flt(it.get("net_amount"))):
+            out.append(_hard("Montants", _("Ligne #{0} ({1}): quantite, prix et montant doivent etre "
+                                           "superieurs a zero (SFE 1.1.22).").format(
+                it.get("idx"), it.get("item_code") or it.get("item_name") or "")))
+    if (doc.get("items") or []) and not abs(flt(doc.get("grand_total"))):
+        out.append(_hard("Montants", _("Le montant de la facture ne peut pas etre nul (SFE 1.1.21).")))
+    return out
+
+
+def evaluate_exemption_reference(doc, settings=None):
+    """Group D (regime derogatoire) or AO client: the exemption reference must be given in
+    'Commentaire A' (FACNO groupes de taxation; SFE annexe 'Lignes de commentaires')."""
+    settings = settings or get_settings()
+    if (doc.get("dgi_comment_a") or "").strip():
+        return []
+    reasons = []
+    if resolve_customer_dgi_type(doc, settings) == "AO":
+        reasons.append(_("client de type AO"))
+    for it in (doc.get("items") or []):
+        if resolve_tax_group(it, settings, doc) == "D":
+            reasons.append(_("article du groupe D (ligne #{0})").format(it.get("idx")))
+            break
+    if not reasons:
+        return []
+    return [_hard("Exoneration", _("Commentaire A obligatoire ({0}): saisissez la reference du "
+                                   "certificat / document d'exoneration delivre par la DGI.").format(", ".join(reasons)))]
+
+
+def evaluate_credit_note(doc, settings=None):
+    """SFE 1.1.25-1.1.28: nature mandatory; reference = Code DEF/DGI of the normalized original
+    (or 'RRR'); for a cancellation / take-back the unit price equals the original price."""
+    settings = settings or get_settings()
+    if resolve_invoice_type(doc, settings) not in CREDIT_TYPES:
+        return []
+    out = []
+    nature = (doc.get("custom_dgi_reference_type") or "").upper()
+    if nature not in ("COR", "RAN", "RAM", "RRR"):
+        out.append(_hard("Avoir", _("Nature de l'avoir obligatoire: COR (Correction), RAN (Annulation), "
+                                    "RAM (Avoir suite reprise) ou RRR (Remise, ristourne, rabais).")))
+    original = doc.get("return_against")
+    if original:
+        code = frappe.db.get_value("Sales Invoice", original, "custom_dgi_code_def")
+        if not code:
+            out.append(_hard("Avoir", _("La facture d'origine {0} n'est pas normalisee (pas de Code DEF/DGI): "
+                                        "l'avoir ne peut pas la referencer.").format(original)))
+        manual = (doc.get("custom_dgi_reference") or "").strip()
+        if manual and code and manual != code:
+            out.append(_hard("Avoir", _("La reference saisie ({0}) differe du Code DEF/DGI de la facture "
+                                        "d'origine ({1}).").format(manual, code)))
+        if nature in ("RAN", "RAM"):
+            orig_rates = {}
+            for r in frappe.get_all("Sales Invoice Item", filters={"parent": original},
+                                    fields=["name", "item_code", "rate"]):
+                orig_rates[r.name] = abs(flt(r.rate))
+                orig_rates.setdefault(("code", r.item_code), abs(flt(r.rate)))
+            for it in (doc.get("items") or []):
+                ref = orig_rates.get(it.get("sales_invoice_item")) if it.get("sales_invoice_item") \
+                    else orig_rates.get(("code", it.get("item_code")))
+                if ref is None:
+                    out.append(_hard("Avoir", _("Ligne #{0}: l'article {1} n'existe pas sur la facture "
+                                                "d'origine.").format(it.get("idx"), it.get("item_code"))))
+                elif abs(abs(flt(it.get("rate"))) - ref) > 0.01:
+                    out.append(_hard("Avoir", _("Ligne #{0}: le prix unitaire ({1}) doit etre egal au prix de "
+                                                "la facture d'origine ({2}) (SFE 1.1.26 e).").format(
+                        it.get("idx"), abs(flt(it.get("rate"))), ref)))
+    elif nature != "RRR":
+        ref = (doc.get("custom_dgi_reference") or "").strip()
+        if len(ref.replace("-", "")) != 24:
+            out.append(_hard("Avoir", _("Avoir sans facture liee: renseignez le Code DEF/DGI d'origine "
+                                        "(24 caracteres) ou choisissez la nature RRR.")))
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Main entry point
 # --------------------------------------------------------------------------- #
 
@@ -374,6 +460,11 @@ def collect_violations(doc, settings=None):
             if vf:
                 violations.append(vf)
 
+    # v5.0.0 legal controls
+    violations.extend(evaluate_line_amounts(doc))
+    violations.extend(evaluate_exemption_reference(doc, settings))
+    violations.extend(evaluate_credit_note(doc, settings))
+
     # Matrix A, B, G
     violations.extend(evaluate_point_of_sale(doc))
     violations.extend(evaluate_customer_fields(doc, settings))
@@ -388,13 +479,25 @@ def validate_sales_invoice(doc, method=None):
         return
     mode = (getattr(settings, "validation_enforcement", None) or "Enforce")
     if mode == "Off":
-        return
-
-    violations = collect_violations(doc, settings)
+        violations = (evaluate_line_amounts(doc) + evaluate_exemption_reference(doc, settings)
+                      + evaluate_credit_note(doc, settings))
+    else:
+        violations = collect_violations(doc, settings)
     if not violations:
         return
 
     overridden = bool(doc.get("dgi_validation_override")) and _can_override(settings)
+    hard = [v for v in violations if v.get("hard")]
+    violations = [v for v in violations if not v.get("hard")]
+    if hard:
+        try:
+            from dgi_compliance.edef.audit import log_exchange
+            log_exchange("legal-validate", {"invoice": doc.name or doc.get("__newname")},
+                         {"violations": hard}, reference_invoice=doc.name)
+        except Exception:
+            pass
+        frappe.throw("<br>".join("&bull; " + v["message"] for v in hard),
+                     title=_("Facture non conforme DGI"))
     blocking = [v for v in violations if v["enforcement"] == "Block"]
     warnings = [v for v in violations if v["enforcement"] == "Warn"]
 
@@ -425,12 +528,40 @@ def validate_sales_invoice(doc, method=None):
     frappe.throw(msg + "<br><br>" + hint, title=_("Combinaison non conforme DGI"))
 
 
+def _check_rate_deviation(doc, settings):
+    """SFE 1.1.30: the exchange rate must stay within 1% of the reference rate (BCC average
+    rate as published by the e-MCF /api/info/currencyRates, synchronised in DGI Reference Value)."""
+    control = getattr(settings, "usd_rate_control", None) or "Bloquer"
+    if control == "Desactive":
+        return
+    from dgi_compliance.edef.mapper import _foreign_ccy, _cur_rate
+    ccy = _foreign_ccy(doc)
+    if not ccy:
+        return
+    ref = flt(frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value"))
+    if not ref:
+        return
+    used = flt(_cur_rate(doc))
+    deviation = abs(used - ref) / ref
+    limit = flt(getattr(settings, "usd_rate_max_deviation", None) or 1.0) / 100.0
+    if deviation <= limit:
+        return
+    msg = _("Taux de change {0} = {1} CDF: ecart de {2}% avec le taux de reference DGI/BCC ({3} CDF). "
+            "Ecart maximum autorise: {4}% (SFE 1.1.30).").format(
+        ccy, used, round(deviation * 100, 2), ref, round(limit * 100, 2))
+    if control == "Alerte":
+        frappe.msgprint(msg, indicator="orange", title=_("Taux de change DGI"))
+    else:
+        frappe.throw(msg, title=_("Taux de change hors tolerance"))
+
+
 def validate_currency(doc, method=None):
     """`validate` hook: enforce the DGI currency matrix (authorized currencies per invoice type).
     Independent from the A-G matrices switch; governed by Settings.currency_enforcement."""
     settings = get_settings()
     if not settings.enabled:
         return
+    _check_rate_deviation(doc, settings)
     mode = getattr(settings, "currency_enforcement", None) or "Enforce"
     if mode == "Off" or not (settings.currency_rules or []):
         return

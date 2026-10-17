@@ -1,12 +1,53 @@
 {
- "doctype": "DocType", "name": "DGI Tax Group Map", "module": "DGI Compliance",
- "istable": 1, "custom": 0, "engine": "InnoDB",
+ "doctype": "DocType",
+ "name": "DGI Tax Group Map",
+ "module": "DGI Compliance",
+ "istable": 1,
+ "custom": 0,
+ "engine": "InnoDB",
  "fields": [
-  {"fieldname": "priority", "label": "Priority", "fieldtype": "Int", "in_list_view": 1, "columns": 1, "description": "Ordre de selection: la priorite la PLUS BASSE gagne. Auto: 10 = Modele de taxe d'article (ligne), 20 = Modele Taxes et Frais de Vente (facture). Laisser vide pour l'attribution automatique."},
-  {"fieldname": "item_tax_template", "label": "Modele de taxe d'article", "fieldtype": "Link", "options": "Item Tax Template", "in_list_view": 1, "columns": 3, "description": "Mapping au niveau LIGNE (Item Tax Template) - priorite 10 par defaut"},
-  {"fieldname": "sales_taxes_template", "label": "Modele Taxes et Frais de Vente", "fieldtype": "Link", "options": "Sales Taxes and Charges Template", "in_list_view": 1, "columns": 3, "description": "Mapping au niveau FACTURE (Sales Taxes and Charges Template) - priorite 20 par defaut"},
-  {"fieldname": "tax_rate", "label": "Tax Rate (%) [Obsolete]", "fieldtype": "Float", "columns": 1, "description": "OBSOLETE: conserve pour compatibilite (ancienne resolution par taux). N'est plus utilise par la resolution v3.5."},
-  {"fieldname": "edef_tax_group", "label": "e-DEF Tax Group (A-P)", "fieldtype": "Select", "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP", "in_list_view": 1, "columns": 2, "reqd": 1}
+  {
+   "fieldname": "priority",
+   "label": "Priority",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "columns": 1,
+   "description": "Ordre de selection: la priorite la PLUS BASSE gagne. Auto: 10 = Modele de taxe d'article (ligne), 20 = Modele Taxes et Frais de Vente (facture). Laisser vide pour l'attribution automatique."
+  },
+  {
+   "fieldname": "item_tax_template",
+   "label": "Modele de taxe d'article",
+   "fieldtype": "Link",
+   "options": "Item Tax Template",
+   "in_list_view": 1,
+   "columns": 3,
+   "description": "Mapping au niveau LIGNE (Item Tax Template) - priorite 10 par defaut"
+  },
+  {
+   "fieldname": "sales_taxes_template",
+   "label": "Modele Taxes et Frais de Vente",
+   "fieldtype": "Link",
+   "options": "Sales Taxes and Charges Template",
+   "in_list_view": 1,
+   "columns": 3,
+   "description": "Mapping au niveau FACTURE (Sales Taxes and Charges Template) - priorite 20 par defaut"
+  },
+  {
+   "fieldname": "tax_rate",
+   "label": "Tax Rate (%) [Obsolete]",
+   "fieldtype": "Float",
+   "columns": 1,
+   "description": "OBSOLETE: conserve pour compatibilite (ancienne resolution par taux). N'est plus utilise par la resolution v3.5."
+  },
+  {
+   "fieldname": "edef_tax_group",
+   "label": "e-DEF Tax Group (A-Z)",
+   "fieldtype": "Select",
+   "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ",
+   "in_list_view": 1,
+   "columns": 2,
+   "reqd": 1
+  }
  ],
  "permissions": []
 }

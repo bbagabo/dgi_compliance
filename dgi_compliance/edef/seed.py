@@ -92,23 +92,58 @@ INVOICE_TYPES = [
 # Matrix B defaults: code, desc, [bill, vat, contact, address, phone, email, registration]
 _M = "Mandatory"
 _O = "Optional"
+# Annexe "Types du client" (SFE fev. 2026): PP all optional; PM denomination + NIF; PC and PL
+# name + NIF; AO name (+ exemption reference, enforced through Commentaire A).
 CUSTOMER_TYPES = [
-    ("PP", "Personne physique",                          [_O, _O, _O, _O, _O, _O, _O]),
-    ("PM", "Personne morale",                            [_M, _M, _M, _M, _M, _M, _M]),
-    ("PC", "Personne physique commercante",              [_M, _M, _M, _M, _M, _M, _O]),
-    ("PL", "Profession liberale",                        [_M, _M, _M, _M, _M, _M, _M]),
-    ("AO", "Ambassades et organisations internationales", [_M, _O, _M, _O, _O, _O, _M]),
+    ("PP", "Personne physique",                           [_O, _O, _O, _O, _O, _O, _O]),
+    ("PM", "Personne morale",                             [_M, _M, _O, _O, _O, _O, _O]),
+    ("PC", "Personne physique commercante",               [_M, _M, _O, _O, _O, _O, _O]),
+    ("PL", "Profession liberale",                         [_M, _M, _O, _O, _O, _O, _O]),
+    ("AO", "Ambassades et organisations internationales", [_M, _O, _O, _O, _O, _O, _O]),
 ]
+# Defaults shipped up to v4.0.0 (used by the v5 patch to update untouched records only).
+CUSTOMER_TYPES_V4 = {
+    "PP": [_O, _O, _O, _O, _O, _O, _O],
+    "PM": [_M, _M, _M, _M, _M, _M, _M],
+    "PC": [_M, _M, _M, _M, _M, _M, _O],
+    "PL": [_M, _M, _M, _M, _M, _M, _M],
+    "AO": [_M, _O, _M, _O, _O, _O, _M],
+}
 _REQ_ORDER = ["req_bill_to_name", "req_vat_reg_no", "req_contact", "req_address",
               "req_phone", "req_email", "req_registration_no"]
 
-TAX_GROUPS = list("ABCDEFGHIJKLMNOP")
+TAX_GROUPS = list("ABCDEFGHIJKLMNOPQRS")
+
+# RDC FACNO - Groupes de taxation v2.0 (octobre 2026): code -> (description, rate %, is_vat)
+TAX_GROUPS_FACNO = {
+    "A": ("Exonere", 0, 0),
+    "B": ("Taxable 16%", 16, 1),
+    "C": ("Taxable 5%", 5, 1),
+    "D": ("Regimes derogatoires TVA", 0, 0),
+    "E": ("Exportation et operations assimilees", 0, 1),
+    "F": ("TVA marche public a financement exterieur (16%)", 16, 1),
+    "G": ("TVA marche public a financement exterieur (5%)", 5, 1),
+    "H": ("Consignation / deconsignation d'emballage", 0, 0),
+    "I": ("Garantie et caution", 0, 0),
+    "J": ("Debours", 0, 0),
+    "K": ("Operations realisees par les non-assujettis", 0, 0),
+    "L": ("Prelevements sur ventes", 0, 0),
+    "M": ("Ventes reglementees avec TVA specifique", 0, 0),
+    "N": ("TVA specifique", 0, 1),
+    "O": ("Taxable 1%", 1, 1),
+    "P": ("TVA marche public a financement exterieur (1%)", 1, 1),
+    "Q": ("Taxable 8%", 8, 1),
+    "R": ("TVA marche public a financement exterieur (8%)", 8, 1),
+    "S": ("Hors champ", 0, 0),
+}
 
 # Matrix G default: native ERPNext Customer Type -> allowed DGI types (is_default flag)
 # Company (Societe) => PM only; Individual (Individuel) => PP (default) or PL.
 CUSTOMER_TYPE_MAP = [
     ("Company", "PM", 1),
+    ("Company", "AO", 0),
     ("Individual", "PP", 1),
+    ("Individual", "PC", 0),
     ("Individual", "PL", 0),
 ]
 
@@ -135,8 +170,10 @@ def seed_mapping_doctypes(force: bool = False) -> dict:
         values.update(dict(zip(_REQ_ORDER, reqs)))
         counts["customer_types"] += _insert_if_missing("DGI Customer Type", code, values)
     for code in TAX_GROUPS:
+        desc, rate, is_vat = TAX_GROUPS_FACNO[code]
         counts["tax_groups"] += _insert_if_missing(
-            "DGI Tax Group", code, {"code": code, "description": f"Groupe de taxe {code}", "source": "Static"})
+            "DGI Tax Group", code, {"code": code, "description": desc, "rate": rate, "is_vat": is_vat,
+                                    "is_active": 1, "source": "Static"})
     frappe.db.commit()
     return counts
 
@@ -156,6 +193,7 @@ def seed_customer_type_mapping(force: bool = False) -> dict:
         settings.append("customer_type_map", {
             "erpnext_customer_type": native, "dgi_customer_type": dgi_code, "is_default": is_default})
         n += 1
+    settings.flags.ignore_mandatory = True
     settings.save(ignore_permissions=True)
     frappe.db.commit()
     return {"seeded": n}
@@ -180,14 +218,14 @@ MATRIX_D_ROWS = [("All", "Any", "Allow")]
 
 # Matrix E: (invoice_type, item_type, status)
 MATRIX_E_ROWS = [
-    ("FA", "BIE", "Blocked"), ("FA", "SER", "Allow"), ("FA", "TAX", "Blocked"),
-    ("EA", "BIE", "Blocked"), ("EA", "SER", "Allow"), ("EA", "TAX", "Blocked"),
+    ("FA", "BIE", "Allow"), ("FA", "SER", "Allow"), ("FA", "TAX", "Blocked"),
+    ("EA", "BIE", "Allow"), ("EA", "SER", "Allow"), ("EA", "TAX", "Blocked"),
 ]
 
 # Matrix F: (credit_nature, item_type, status)
 MATRIX_F_ROWS = [
     ("COR", "All", "Allow"), ("RAN", "All", "Allow"), ("RAM", "All", "Allow"),
-    ("RRR", "BIE", "Blocked"), ("RRR", "SER", "Allow"), ("RRR", "TAX", "Allow"),
+    ("RRR", "BIE", "Allow"), ("RRR", "SER", "Allow"), ("RRR", "TAX", "Allow"),
 ]
 
 MATRIX_C = "C - Invoice Type / Country"
@@ -255,24 +293,28 @@ def seed_currency_rules(force: bool = False) -> dict:
         settings.append("currency_rules", {
             "currency": ccy, "invoice_type": itype, "is_allowed": allowed, "rate_source": src})
         n += 1
+    settings.flags.ignore_mandatory = True
     settings.save(ignore_permissions=True)
     frappe.db.commit()
     return {"seeded": n}
 
 
-def set_default_print_format():
-    """Make 'DGI Sales Invoice' the default Print Format for Sales Invoice, via a Property Setter
+DEFAULT_PRINT_FORMAT = "DGI Facture Normalisee"
+
+
+def set_default_print_format(print_format: str = DEFAULT_PRINT_FORMAT):
+    """Make the normalized invoice format the default Print Format for Sales Invoice, via a Property Setter
     (DocType-level 'default_print_format'). This is the standard, upgrade-safe Frappe mechanism:
     it does NOT modify any ERPNext core file, GL, stock or validation - it only changes which
     print format is pre-selected. Reversible by deleting the Property Setter."""
-    if not frappe.db.exists("Print Format", "DGI Sales Invoice"):
+    if not frappe.db.exists("Print Format", print_format):
         return {"skipped": "print format missing"}
     try:
         from frappe.custom.doctype.property_setter.property_setter import make_property_setter
-        make_property_setter("Sales Invoice", None, "default_print_format", "DGI Sales Invoice",
+        make_property_setter("Sales Invoice", None, "default_print_format", print_format,
                              "Data", for_doctype=True, validate_fields_for_doctype=False)
         frappe.db.commit()
-        return {"default_print_format": "DGI Sales Invoice"}
+        return {"default_print_format": print_format}
     except Exception as e:
         frappe.log_error(title="[DGI] set_default_print_format", message=str(e))
         return {"error": str(e)}

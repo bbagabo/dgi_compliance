@@ -85,6 +85,11 @@ frappe.ui.form.on("DGI Compliance Settings", {
             });
         }, grp);
 
+        // ----- v5.0.0: statistical reports X / Z / A -----
+        frm.add_custom_button(__("Rapports X / Z / A"), () => frappe.set_route("List", "DGI Rapport Fiscal"), __("Rapports"));
+        frm.add_custom_button(__("Factures en attente de normalisation"),
+            () => frappe.set_route("query-report", "Factures en attente de normalisation"), __("Rapports"));
+
         // ----- Individual updates (one button each) -----
         frm.add_custom_button(__("MAJ Points de vente"), () => {
             run("dgi_compliance.edef.sync.refresh_points_of_sale", {}, __("Mise a jour des points de vente..."), (m) => {

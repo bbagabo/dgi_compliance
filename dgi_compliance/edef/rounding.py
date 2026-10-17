@@ -9,7 +9,6 @@ GL stays balanced because the delta is added to BOTH the tax row (VAT payable) a
 total (receivable). Test in staging before enabling in production.
 """
 from decimal import Decimal, ROUND_CEILING
-import frappe
 from frappe.utils import flt, rounded
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 

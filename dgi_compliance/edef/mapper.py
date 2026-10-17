@@ -1,71 +1,82 @@
-"""Map a real ERPNext v16 Sales Invoice to the e-DEF InvoiceRequestDataDto.
+"""Map a real ERPNext v16 Sales Invoice to the e-MCF InvoiceRequestDataDto (API e-MCF v1.3).
 
-IMPORTANT — currency: ALL figures sent to the e-DEF API are in LCY = CDF (company/base currency),
-even when the invoice is issued in USD. We send base_* amounts (CDF) for prices/payments and pass
-curCode/curRate so the DGI can display an indicative foreign-currency total on its side.
+Currency: ALL figures sent to the e-MCF are in CDF (company base currency, base_* fields),
+even for a USD invoice; curCode/curRate/curDate let the DGI display the indicative
+foreign-currency total.
 
-Field references (standard ERPNext, no core change):
-  Sales Invoice: name, company, customer, customer_name, tax_id, contact_email, contact_mobile,
-                 address_display, currency, conversion_rate, posting_date, posting_time,
-                 is_return, return_against, owner
-  Sales Invoice Item (.items): item_code, item_name, description, qty, base_rate, base_net_rate,
-                 item_tax_template
-  Sales Invoice Payment (.payments, POS): mode_of_payment, base_amount
+v5.0.0 (HL1):
+  * price mode derived from the invoice (ttc only when the taxes are included in the price);
+  * unit prices built from the NET line amount, so line AND document-level discounts are
+    reflected in both modes; prices rounded to 2 decimals, quantities to 3 (SFE 1.5.1/1.5.2);
+  * specific tax (taxSpecificValue / taxSpecificAmount) carried inside the line net amount;
+  * tax groups A-Z (FACNO groupes de taxation v2.0), item flagged "hors champ" sent with the
+    code "HORS CHAMP" (Communique officiel n°010);
+  * payments from edef.payments (same lines as the printed invoice), PaymentDto
+    currencyCode/currencyRate;
+  * operator = the user who normalizes (full name + user id);
+  * credit notes: reference forced to the original Code DEF/DGI, or "RRR" (SFE 1.1.26/1.1.28).
 """
 import frappe
 from frappe import _
-from frappe.utils import get_datetime
+from frappe.utils import flt, get_datetime
+
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
+from dgi_compliance.edef.calc import (
+    VAT_ONLY_GROUPS, round2, round3, split_specific_tax, parse_specific_tax,
+)
+from dgi_compliance.edef.payments import PaymentTypeMappingError, resolve_payment_lines
+
+__all__ = ["PaymentTypeMappingError"]
 
 INVOICE_TYPES = ("FV", "FT", "FA", "EV", "ET", "EA")
-TAX_GROUPS = set("ABCDEFGHIJKLMNOP")
-COMMENT_LETTERS = "abcdefgh"  # cmta..cmth = Commentaire A..H (protocole e-MCF v1.3)
+CREDIT_TYPES = ("FA", "EA")
+TAX_GROUPS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+CLIENT_TYPES = ("PP", "PM", "PC", "PL", "AO")
+REFERENCE_TYPES = ("COR", "RAN", "RAM", "RRR")
+REFERENCE_LABELS = {"COR": "Correction", "RAN": "Annulation", "RAM": "Avoir suite reprise",
+                    "RRR": "RRR"}
+COMMENT_LETTERS = "abcdefgh"  # cmta..cmth = Commentaire A..H
+HORS_CHAMP_CODE = "HORS CHAMP"
 
 
 class TaxGroupMappingError(frappe.ValidationError):
-    """A tax is specified on the invoice but has no Tax Group mapping (A-P)."""
+    """A tax is specified on the invoice but has no Tax Group mapping."""
 
 
-class PaymentTypeMappingError(frappe.ValidationError):
-    """A Mode of Payment is specified on the invoice but has no Payment Type mapping."""
-
+# --------------------------------------------------------------------------- #
+# Header data
+# --------------------------------------------------------------------------- #
 
 def _seller_nif(doc, settings):
     if settings.default_nif:
-        return settings.default_nif
-    return frappe.db.get_value("Company", doc.company, "tax_id")
+        return settings.default_nif.strip()
+    return (frappe.db.get_value("Company", doc.company, "tax_id") or "").strip() or None
 
 
 def _seller_isf(doc, settings):
-    """ISF is defined ONLY in DGI Compliance Settings (single source of truth, applied to every
-    invoice type). No per-invoice or per-company override, to avoid divergences."""
+    """ISF is defined ONLY in DGI Compliance Settings (single source of truth)."""
     return (settings.isf or "").strip() or None
 
 
-def _price_mode(doc, settings):
-    for t in (doc.get("taxes") or []):
-        if getattr(t, "included_in_print_rate", 0):
-            return "ttc"
-    return settings.price_mode or "ttc"
+def price_mode(doc, settings=None):
+    """'ttc' when at least one tax is included in the printed rate, 'ht' when the invoice
+    carries taxes added on top of the price; Settings.price_mode only when no tax at all."""
+    settings = settings or get_settings()
+    taxes = doc.get("taxes") or []
+    if any(getattr(t, "included_in_print_rate", 0) or (t.get("included_in_print_rate") if hasattr(t, "get") else 0)
+           for t in taxes):
+        return "ttc"
+    if taxes:
+        return "ht"
+    return (settings.price_mode or "ttc").lower()
 
 
-def _item_rate_cdf(it, mode):
-    # Always CDF (base currency). Use base_net_rate for HT, else base_rate.
-    # abs(): credit notes use negative qty in ERPNext but the DGI payload must be positive.
-    if mode == "ht" and it.get("base_net_rate"):
-        return abs(float(it.base_net_rate))
-    return abs(float(it.get("base_rate") or it.get("base_net_rate") or 0))
+# kept for backward compatibility (v4 name)
+_price_mode = price_mode
 
 
 def _invoice_type(doc, settings):
-    """Resolve the e-DEF invoice type.
-
-    Rules (v3.0):
-      * Explicit "Type de facture DGI" on the invoice wins -> lets the user pick FT/ET (acompte).
-      * Returns / credit notes auto-resolve to FA (or EA for export).
-      * Export sales auto-resolve to EV; everything else to FV (the standard default).
-    FT/ET (prepayment) are never auto-derived: they require an explicit selection.
-    """
+    """Explicit "Type de facture DGI" wins; returns -> FA/EA; export -> EV; else default FV."""
     if doc.get("dgi_invoice_type"):
         return doc.get("dgi_invoice_type")
     if doc.get("is_return"):
@@ -75,13 +86,7 @@ def _invoice_type(doc, settings):
     return settings.default_invoice_type or "FV"
 
 
-CLIENT_TYPES = ("PP", "PM", "PC", "PL", "AO")
-
-
 def _client_dgi_type(doc, settings):
-    """Resolve the e-DEF client type code (ClientTypeEnum) for this invoice's customer:
-    explicit on the invoice/customer, else derived from the native Customer Type via the
-    Customer Type Mapping default (Matrice G). Returns None when it cannot be resolved."""
     ctype = doc.get("dgi_customer_type")
     if not ctype and doc.get("customer"):
         ctype = frappe.db.get_value("Customer", doc.get("customer"), "dgi_customer_type")
@@ -93,59 +98,45 @@ def _client_dgi_type(doc, settings):
 
 def _client(doc, settings):
     name = doc.get("customer_name") or doc.get("customer")
-    nif = doc.get("tax_id")
-    if not name and not nif:
-        return None
+    nif = (doc.get("tax_id") or "").strip()
     address = frappe.utils.strip_html(doc.get("address_display") or "").replace("\n", ", ").strip(", ").strip()
     client = {
         "nif": nif or None,
         "name": name or None,
-        "contact": doc.get("contact_email") or doc.get("contact_mobile") or None,
+        "contact": doc.get("contact_mobile") or doc.get("contact_email") or None,
         "address": address or None,
     }
-    # ClientDto.type (ClientTypeEnum) + typeDesc - required by the e-DEF protocol.
     ctype = _client_dgi_type(doc, settings)
     if ctype:
         client["type"] = ctype
-        if frappe.db.exists("DGI Customer Type", ctype):
-            desc = frappe.db.get_value("DGI Customer Type", ctype, "description")
-            if desc:
-                client["typeDesc"] = desc
-    return client
+        desc = frappe.db.get_value("DGI Customer Type", ctype, "description") \
+            if frappe.db.exists("DGI Customer Type", ctype) else None
+        if desc:
+            client["typeDesc"] = desc
+    client = {k: v for k, v in client.items() if v not in (None, "")}
+    return client or None
 
 
-def _payments(doc, settings):
-    rows = doc.get("payments") or []
-    if not rows:
-        return None
-    ccy = _foreign_ccy(doc)
-    rate = _cur_rate(doc) if ccy else None
-    out = []
-    for p in rows:
-        # v3.6: same principle as the Tax Group - a specified but unmapped Mode of Payment
-        # blocks with an explicit message; the default NEVER stands in for a missing mapping.
-        ptype = settings.payment_type_for(p.mode_of_payment, strict=True)
-        if not ptype:
-            frappe.throw(
-                _("Mapping Payment Type manquant pour le mode de paiement '{0}' (ligne #{1}). "
-                  "Ajoutez la correspondance dans DGI Compliance Settings > Payment Mode Mapping "
-                  "(Mode de paiement ERPNext -> type e-DEF). Le Default Payment Type ne "
-                  "s'applique que lorsqu'aucun mode de paiement n'est specifie sur la ligne.")
-                .format(p.mode_of_payment, p.get("idx") or "?"),
-                exc=PaymentTypeMappingError, title=_("Mapping Payment Type DGI"))
-        row = {
-            "name": ptype,
-            "amount": abs(float(p.base_amount or 0)),  # CDF (abs: returns stay positive for DGI)
-        }
-        if ccy:
-            row["curCode"] = ccy
-            row["curRate"] = rate
-        out.append(row)
-    return out
+def operator_for(doc):
+    """The user performing the normalization (scheduler/Guest falls back to the creator)."""
+    user = getattr(getattr(frappe, "session", None), "user", None)
+    if not user or user == "Guest":
+        user = doc.get("owner") or "Administrator"
+    full_name = frappe.utils.get_fullname(user) or user
+    return {"id": user[:60], "name": full_name[:60]}
+
+
+# --------------------------------------------------------------------------- #
+# Lines
+# --------------------------------------------------------------------------- #
+
+def group_rate(letter):
+    if not letter or not frappe.db.exists("DGI Tax Group", letter):
+        return 0.0
+    return flt(frappe.db.get_value("DGI Tax Group", letter, "rate"))
 
 
 def _item_edef_type(item_code):
-    """Prefer the explicit DGI Item Type on the Item; fall back to the stock-item heuristic."""
     if not item_code:
         return "BIE"
     explicit = frappe.db.get_value("Item", item_code, "dgi_item_type")
@@ -154,11 +145,16 @@ def _item_edef_type(item_code):
     return "SER" if frappe.db.get_value("Item", item_code, "is_stock_item") == 0 else "BIE"
 
 
+def _is_hors_champ(item_code):
+    if not item_code:
+        return False
+    try:
+        return bool(frappe.db.get_value("Item", item_code, "dgi_hors_champ"))
+    except Exception:
+        return False
+
+
 def _resolve_tax_group_strict(doc, it, settings):
-    """Resolve the e-DEF Tax Group via the mapping (line Item Tax Template first, then the
-    invoice-level Sales Taxes and Charges Template). The Default Tax Group is used ONLY when
-    no tax is specified on the invoice; a specified-but-unmapped tax raises an explicit error
-    (the default must never override / stand in for a missing mapping)."""
     grp = settings.tax_group_for_invoice(doc, it, strict=True)
     if grp:
         return grp
@@ -166,52 +162,106 @@ def _resolve_tax_group_strict(doc, it, settings):
     frappe.throw(
         _("Mapping Tax Group manquant pour '{0}' (ligne #{1}). Ajoutez la correspondance dans "
           "DGI Compliance Settings > Tax Group Mapping (Modele Taxes et Frais de Vente ou "
-          "Modele de taxe d'article -> groupe A-P). Le Default Tax Group ne s'applique que "
-          "lorsqu'aucune taxe n'est specifiee sur la facture.").format(tpl, it.get("idx") or "?"),
+          "Modele de taxe d'article -> groupe de taxation). Le Default Tax Group ne s'applique "
+          "que lorsqu'aucune taxe n'est specifiee sur la facture.").format(tpl, it.get("idx") or "?"),
         exc=TaxGroupMappingError, title=_("Mapping Tax Group DGI"))
+
+
+def build_lines(doc, settings=None, mode=None):
+    """Per-line fiscal data in CDF, shared by the e-MCF request and the printed invoice."""
+    settings = settings or get_settings()
+    mode = mode or price_mode(doc, settings)
+    doc_discount = bool(flt(doc.get("discount_amount")))
+    lines = []
+    for it in (doc.get("items") or []):
+        qty = abs(flt(it.get("qty")))
+        grp = _resolve_tax_group_strict(doc, it, settings)
+        r = group_rate(grp)
+        net = abs(flt(it.get("base_net_amount")))                 # CDF, excl. VAT, after discounts
+        try:
+            net_wo_ts, ts_amount, ts_value = split_specific_tax(net, qty, it.get("dgi_specific_tax"))
+        except ValueError:
+            frappe.throw(_("Ligne #{0}: valeur de taxe specifique invalide '{1}' (attendu: montant "
+                           "par unite ou pourcentage, ex. 230 ou 10%).").format(it.get("idx"), it.get("dgi_specific_tax")))
+        vat_factor = 1.0 if (grp in VAT_ONLY_GROUPS or not r) else (1 + r / 100.0)
+
+        if qty:
+            if mode == "ttc":
+                entered = abs(flt(it.get("base_rate")))
+                if (not doc_discount and not ts_amount and vat_factor != 1.0
+                        and abs(entered * qty - net * vat_factor) <= 0.01 * qty + 0.02):
+                    unit = entered                                # TTC price exactly as entered
+                else:
+                    unit = net_wo_ts * vat_factor / qty
+            else:
+                unit = net_wo_ts / qty
+        else:
+            unit = 0.0
+        price = round2(unit)
+
+        # Price before any discount (originalPrice), same basis as `price`.
+        gross = abs(flt(it.get("base_price_list_rate"))) or abs(flt(it.get("base_rate")))
+        if ts_amount and qty:
+            kind, number = parse_specific_tax(it.get("dgi_specific_tax"))
+            ts_unit = ts_amount / qty
+            if mode == "ttc":
+                gross = gross - ts_unit * vat_factor
+            else:
+                gross = gross / (1 + number / 100.0) if kind == "percent" else gross - ts_unit
+        gross = round2(gross)
+
+        disc_pct = flt(it.get("discount_percentage"))
+        line = {
+            "idx": it.get("idx"),
+            "item_code": it.get("item_code") or "",
+            "code": HORS_CHAMP_CODE if _is_hors_champ(it.get("item_code")) else (it.get("item_code") or None),
+            "name": (it.get("item_name") or it.get("description") or "ARTICLE").strip(),
+            "type": _item_edef_type(it.get("item_code")),
+            "group": grp,
+            "rate": r,
+            "price": price,
+            "quantity": round3(qty),
+            "amount": round2(price * round3(qty)),
+            "uom": it.get("uom") or "",
+            "ts_value": ts_value,
+            "ts_amount": round2(ts_amount),
+            "gross": gross,
+            "discount_label": None,
+        }
+        if gross > price + 0.005:
+            line["discount_label"] = ("Remise {0}%".format("%g" % disc_pct) if disc_pct > 0
+                                      else ("Remise globale" if doc_discount else "Remise"))
+        lines.append(line)
+    return lines
 
 
 def _items(doc, settings, mode):
     send_disc = bool(getattr(settings, "send_line_discounts", 1))
     out = []
-    for it in (doc.get("items") or []):
-        price = _item_rate_cdf(it, mode)  # net unit price AFTER discount (CDF), drives the DGI total
+    for ln in build_lines(doc, settings, mode):
         row = {
-            "code": it.get("item_code") or None,
-            "name": it.get("item_name") or it.get("description") or "ARTICLE",
-            "type": _item_edef_type(it.get("item_code")),
-            "price": price,
-            "quantity": abs(float(it.qty or 0)),
-            "taxGroup": _resolve_tax_group_strict(doc, it, settings),
+            "code": ln["code"],
+            "name": ln["name"],
+            "type": ln["type"],
+            "price": ln["price"],
+            "quantity": ln["quantity"],
+            "taxGroup": ln["group"],
         }
-        # Discount (protocole e-MCF v1.3): ItemDto.price = prix net APRES remise (= ERPNext);
-        # originalPrice = prix d'origine AVANT remise (valeur absolue, sans reduction);
-        # priceModification = description de la modification (ex. 'Remise 10%').
-        # The net price still drives the DGI total, so the reconciliation is unaffected.
-        if send_disc:
-            gross = abs(float(it.get("base_price_list_rate") or 0))
-            if not gross:
-                # v3.5 fallback: no price list on the line but a manual discount_amount exists
-                # (rate edited directly). Rebuild the gross price in CDF from the discount.
-                disc = abs(float(it.get("discount_amount") or 0))
-                if disc:
-                    conv = abs(float(it.get("base_rate") or 0)) / abs(float(it.get("rate") or 1) or 1)
-                    gross = price + disc * (conv or 1)
-            if gross and gross > price + 0.005:
-                row["originalPrice"] = gross
-                pct = float(it.get("discount_percentage") or 0)
-                row["priceModification"] = (
-                    "Remise {0}%".format(("%g" % pct)) if pct > 0 else "Remise")
+        if ln["ts_amount"]:
+            row["taxSpecificValue"] = ln["ts_value"]
+            row["taxSpecificAmount"] = ln["ts_amount"]
+        if send_disc and ln["discount_label"]:
+            row["originalPrice"] = ln["gross"]
+            row["priceModification"] = ln["discount_label"]
         out.append(row)
     return out
 
 
-def _foreign_ccy(doc):
-    """Return the invoice (transaction) currency when it differs from the local currency (CDF).
+# --------------------------------------------------------------------------- #
+# Currency
+# --------------------------------------------------------------------------- #
 
-    The e-DEF API works in LCY = CDF: all amounts we send are CDF (base_* fields). When the invoice
-    is issued in a foreign currency, we additionally send curCode/curRate/curDate so the DGI can
-    display the indicative foreign-currency total. Returns None for a CDF (local) invoice."""
+def _foreign_ccy(doc):
     company_ccy = frappe.get_cached_value("Company", doc.company, "default_currency")
     ccy = doc.get("currency")
     if ccy and ccy not in (company_ccy, "CDF"):
@@ -220,35 +270,26 @@ def _foreign_ccy(doc):
 
 
 def _cur_rate(doc):
-    """Exchange rate to send: CDF per 1 unit of the foreign currency.
-    The DGI derives the foreign value as CDF_total / curRate.
-
-    Source resolution (in order):
-      0) the currency matrix rule (Settings -> Currency Rules) for this currency/type:
-         Manuel -> manual_rate ; DGI Officiel -> published rate ; ERPNext -> conversion_rate;
-      1) doc.conversion_rate (the rate actually used on the invoice);
-      2) base_grand_total / grand_total (recomputed);
-      3) the DGI official published rate (DGI Reference Value 'Currency Rate::<CCY>')."""
+    """CDF per 1 unit of the foreign currency (currency rule, then the invoice rate)."""
     ccy = doc.get("currency")
     settings = get_settings()
     rule = settings.currency_rule_for(ccy, _invoice_type(doc, settings))
     if rule:
         src = (rule.get("rate_source") or "ERPNext")
-        if src == "Manuel" and float(rule.get("manual_rate") or 0) > 0:
-            return float(rule.get("manual_rate"))
+        if src == "Manuel" and flt(rule.get("manual_rate")) > 0:
+            return flt(rule.get("manual_rate"))
         if src in ("DGI Officiel", "DGI Official"):
             off = frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value")
             if off:
-                return float(off)
-    rate = float(doc.get("conversion_rate") or 0)
+                return flt(off)
+    rate = flt(doc.get("conversion_rate"))
     if rate > 0:
         return rate
-    gt = abs(float(doc.get("grand_total") or 0))
-    bgt = abs(float(doc.get("base_grand_total") or 0))
+    gt = abs(flt(doc.get("grand_total")))
+    bgt = abs(flt(doc.get("base_grand_total")))
     if gt:
         return round(bgt / gt, 6)
-    official = frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value")
-    return float(official or 0)
+    return flt(frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value"))
 
 
 def _currency_block(doc, dto):
@@ -261,9 +302,41 @@ def _currency_block(doc, dto):
     dto["curDate"] = dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _payments(doc, settings):
+    ccy = _foreign_ccy(doc)
+    rate = _cur_rate(doc) if ccy else None
+    out = []
+    for ln in resolve_payment_lines(doc, settings):
+        row = {"name": ln["type"], "amount": ln["amount_cdf"]}
+        if ccy:
+            row["currencyCode"] = ccy
+            row["currencyRate"] = rate
+        out.append(row)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Credit notes
+# --------------------------------------------------------------------------- #
+
+def credit_reference(doc):
+    """(reference, nature): the original Code DEF/DGI for a linked credit note, 'RRR' for a
+    rebate not tied to a sale, else the reference typed by the user."""
+    nature = (doc.get("custom_dgi_reference_type") or "").upper() or None
+    if doc.get("return_against"):
+        return frappe.db.get_value("Sales Invoice", doc.return_against, "custom_dgi_code_def"), nature
+    if nature == "RRR":
+        return "RRR", nature
+    return (doc.get("custom_dgi_reference") or "").strip() or None, nature
+
+
+# --------------------------------------------------------------------------- #
+# Request
+# --------------------------------------------------------------------------- #
+
 def build_invoice_request(doc):
     settings = get_settings()
-    mode = _price_mode(doc, settings)
+    mode = price_mode(doc, settings)
     dto = {
         "nif": _seller_nif(doc, settings),
         "rn": doc.name,
@@ -271,7 +344,7 @@ def build_invoice_request(doc):
         "isf": _seller_isf(doc, settings),
         "type": _invoice_type(doc, settings),
         "items": _items(doc, settings, mode),
-        "operator": {"id": None, "name": (doc.get("owner") or "SYSTEM")[:60]},
+        "operator": operator_for(doc),
     }
     client = _client(doc, settings)
     if client:
@@ -279,14 +352,12 @@ def build_invoice_request(doc):
     payments = _payments(doc, settings)
     if payments:
         dto["payment"] = payments
-    if dto["type"] in ("FA", "EA"):
-        ref_code = None
-        if doc.get("return_against"):
-            ref_code = frappe.db.get_value("Sales Invoice", doc.return_against, "custom_dgi_code_def")
-        dto["reference"] = doc.get("custom_dgi_reference") or ref_code
-        dto["referenceType"] = doc.get("custom_dgi_reference_type")
-        dto["referenceDesc"] = doc.get("custom_dgi_reference_desc")
-    # Commentaires normalises A-H -> cmta..cmth (protocole e-MCF v1.3, lignes optionnelles)
+    if dto["type"] in CREDIT_TYPES:
+        ref, nature = credit_reference(doc)
+        dto["reference"] = ref
+        dto["referenceType"] = nature
+        desc = (doc.get("custom_dgi_reference_desc") or REFERENCE_LABELS.get(nature or "", "") or "").strip()
+        dto["referenceDesc"] = desc[:20] or None
     for letter in COMMENT_LETTERS:
         val = (doc.get("dgi_comment_" + letter) or "").strip()
         if val:
@@ -296,7 +367,6 @@ def build_invoice_request(doc):
 
 
 def validate_invoice_request(dto):
-    import re
     errors = []
     if not dto.get("nif"):
         errors.append("nif manquant (Company.tax_id ou Settings.default_nif)")
@@ -304,31 +374,45 @@ def validate_invoice_request(dto):
     if not isf:
         errors.append("isf manquant: renseignez l'ISF (fourni par la DGI) dans DGI Compliance Settings.")
     elif isf.upper().replace("-", "") in ("AAABBBNN",):
-        errors.append("isf invalide: 'AAA-BBB-NN' est un gabarit d'exemple - saisissez votre ISF reel dans DGI Compliance Settings.")
-    # Le format exact de l'ISF est valide par la DGI cote serveur: on ne bloque pas sur un motif rigide.
+        errors.append("isf invalide: 'AAA-BBB-NN' est un gabarit d'exemple - saisissez votre ISF reel.")
+    elif len(isf) > 10:
+        errors.append("isf trop long (10 caracteres maximum, format AAA-BBB-NN)")
     if dto.get("mode") not in ("ttc", "ht"):
         errors.append("mode doit etre 'ttc' ou 'ht'")
     if dto.get("type") not in INVOICE_TYPES:
         errors.append(f"type invalide ({dto.get('type')})")
     items = dto.get("items") or []
     if not items:
-        errors.append("items vide")
-    for i, it in enumerate(items):
-        if not it.get("name"):
-            errors.append(f"items[{i}].name manquant")
+        errors.append("la facture doit contenir au moins un article")
+    total = 0.0
+    for i, it in enumerate(items, start=1):
+        if not (it.get("name") or "").strip():
+            errors.append(f"ligne {i}: nom d'article vide")
         if it.get("taxGroup") not in TAX_GROUPS:
-            errors.append(f"items[{i}].taxGroup hors A-P")
-        if not (it.get("price", -1) >= 0):
-            errors.append(f"items[{i}].price invalide")
-        if not (it.get("quantity", 0) > 0):
-            errors.append(f"items[{i}].quantity doit etre > 0")
-        if it.get("originalPrice") is not None and float(it.get("originalPrice") or 0) < float(it.get("price") or 0):
-            errors.append(f"items[{i}].originalPrice doit etre >= price (prix avant remise)")
+            errors.append(f"ligne {i}: groupe de taxation invalide ({it.get('taxGroup')})")
+        if not (flt(it.get("price")) > 0):
+            errors.append(f"ligne {i}: prix nul ou negatif interdit (SFE 1.1.22)")
+        if not (flt(it.get("quantity")) > 0):
+            errors.append(f"ligne {i}: quantite nulle ou negative interdite (SFE 1.1.22)")
+        if it.get("originalPrice") is not None and flt(it.get("originalPrice")) < flt(it.get("price")):
+            errors.append(f"ligne {i}: prix d'origine inferieur au prix net")
+        total += flt(it.get("price")) * flt(it.get("quantity"))
+    if items and total <= 0:
+        errors.append("montant de la facture nul ou negatif (SFE 1.1.21)")
     if not (dto.get("operator") or {}).get("name"):
-        errors.append("operator.name manquant")
+        errors.append("nom de l'operateur manquant")
     client = dto.get("client") or {}
-    if client.get("type") and client.get("type") not in ("PP", "PM", "PC", "PL", "AO"):
-        errors.append(f"client.type invalide ({client.get('type')})")
-    if dto.get("type") in ("FA", "EA") and not dto.get("reference"):
-        errors.append("reference obligatoire pour FA/EA (Code DEF/DGI d'origine)")
+    if client.get("type") and client.get("type") not in CLIENT_TYPES:
+        errors.append(f"type de client invalide ({client.get('type')})")
+    for p in dto.get("payment") or []:
+        if flt(p.get("amount")) < 0:
+            errors.append("montant de paiement negatif")
+    if dto.get("type") in CREDIT_TYPES:
+        ref = (dto.get("reference") or "").strip()
+        if not ref:
+            errors.append("reference de la facture d'origine (Code DEF/DGI) obligatoire pour FA/EA")
+        elif ref != "RRR" and len(ref.replace("-", "")) != 24:
+            errors.append(f"reference '{ref}': un Code DEF/DGI compte 24 caracteres (hors tirets)")
+        if dto.get("referenceType") not in REFERENCE_TYPES:
+            errors.append("nature de l'avoir obligatoire (COR, RAN, RAM ou RRR)")
     return errors
