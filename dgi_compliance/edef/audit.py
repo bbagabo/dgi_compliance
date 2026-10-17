@@ -51,23 +51,28 @@ def log_exchange(direction, payload=None, response=None, error=None,
             {"direction": direction, "request": payload, "response": response, "error": error}))
 
 
+# Technical entries that may be purged. Every other entry (create, confirm, cancel, check-amounts,
+# reports...) is part of the electronic journal (SFE 1.1.20) and is never purged.
+PURGEABLE_DIRECTIONS = ("token-check", "sync", "matrix-validate", "currency-validate", "legal-validate",
+                        "validate", "normalize-manual", "retry", "error-detail")
+
+
 def purge_old_logs(days: int | None = None) -> int:
     from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
     settings = get_settings()
     days = int(days if days is not None else (settings.log_retention_days or 180))
     cutoff = add_to_date(now_datetime(), days=-days)
-    n = frappe.db.count("DGI Exchange Log", {"creation": ["<", cutoff]})
+    filters = {"creation": ["<", cutoff], "direction": ["in", PURGEABLE_DIRECTIONS]}
+    n = frappe.db.count("DGI Exchange Log", filters)
     if n:
-        # Bulk delete: DGI Exchange Log has no child tables / attachments, so a direct
-        # SQL delete is safe and orders of magnitude faster than delete_doc per row.
-        frappe.db.delete("DGI Exchange Log", {"creation": ["<", cutoff]})
+        frappe.db.delete("DGI Exchange Log", filters)
     frappe.db.commit()
     return int(n)
 
 
 @frappe.whitelist()
 def purge_now(days: int | None = None) -> dict:
-    frappe.only_for(["System Manager", "Accounts Manager"])
+    frappe.only_for(["System Manager"])
     n = purge_old_logs(days)
     return {"deleted": n}
 

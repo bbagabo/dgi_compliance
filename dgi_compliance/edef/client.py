@@ -11,7 +11,6 @@ v3.5 hardening:
 import json
 import time
 import requests
-import frappe
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 
 RETRY_STATUSES = (502, 503, 504)
@@ -77,6 +76,10 @@ def call(method: str, path: str, body: dict | None = None, retries: int | None =
                 data = resp.text
             last = {"ok": resp.ok, "status": resp.status_code, "data": data,
                     "url": url, "duration_ms": elapsed, "attempts": attempt + 1}
+            if resp.status_code == 401:
+                last["error"] = ("HTTP 401: jeton e-MCF invalide ou expire. Regenerez-le sur le "
+                                 "portail e-MCF et mettez a jour DGI Compliance Settings.")
+                return last
             if resp.status_code not in RETRY_STATUSES or attempt >= retries:
                 return last
         except requests.RequestException as e:
@@ -132,9 +135,24 @@ def create_invoice(dto: dict) -> dict:
     return call("POST", "/api/invoice", dto, retries=0)
 
 
+def invoice_details(uid: str) -> dict:
+    """GET /api/invoice/{uid}: content of a PENDING request (API e-MCF v1.3 section 1.4)."""
+    return call("GET", f"/api/invoice/{uid}")
+
+
+def _action(name: str) -> str:
+    # API e-MCF v1.3 section 1.3 writes CONFIRM / CANCEL; the e-MCF test platform also accepts
+    # lower case (used up to v4). Configurable in Settings -> finalize_action_case.
+    s = get_settings()
+    return name.upper() if (getattr(s, "finalize_action_case", None) or "minuscules") == "MAJUSCULES" else name.lower()
+
+
 def confirm_invoice(uid: str, total: float, vtotal: float) -> dict:
-    return call("PUT", f"/api/invoice/{uid}/confirm", {"total": total, "vtotal": vtotal})
+    # Never retried automatically: if a CONFIRM was applied but its response lost, a second
+    # CONFIRM answers error 20 and the security elements would be lost (see tasks.py).
+    return call("PUT", f"/api/invoice/{uid}/{_action('confirm')}", {"total": total, "vtotal": vtotal},
+                retries=0)
 
 
 def cancel_invoice(uid: str) -> dict:
-    return call("PUT", f"/api/invoice/{uid}/cancel")
+    return call("PUT", f"/api/invoice/{uid}/{_action('cancel')}")
