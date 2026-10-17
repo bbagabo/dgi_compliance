@@ -59,7 +59,7 @@
   "label": "Reference d'origine (Code DEF/DGI)",
   "fieldtype": "Data",
   "insert_after": "custom_dgi_input_cb",
-  "description": "Obligatoire pour les avoirs (FA/EA). Repris de la facture d'origine si liee.",
+  "description": "Code DEF/DGI de la facture d'origine: rempli automatiquement depuis 'Retour contre'. 'RRR' pour un rabais non lie a une facture.",
   "depends_on": "eval:doc.is_return || ['FA','EA'].includes(doc.dgi_invoice_type)"
  },
  {
@@ -71,7 +71,7 @@
   "fieldtype": "Select",
   "options": "\nCOR\nRAN\nRAM\nRRR",
   "insert_after": "custom_dgi_reference",
-  "description": "COR=Correction, RAN=Annulation, RAM=Avoir suite reprise, RRR=Remise/ristourne/rabais (Matrice F).",
+  "description": "COR = Correction, RAN = Annulation, RAM = Avoir suite reprise, RRR = Remise/ristourne/rabais (obligatoire pour FA/EA).",
   "depends_on": "eval:doc.is_return || ['FA','EA'].includes(doc.dgi_invoice_type)"
  },
  {
@@ -92,7 +92,7 @@
   "label": "Override validation DGI (admin)",
   "fieldtype": "Check",
   "insert_after": "custom_dgi_reference_desc",
-  "description": "Effectif uniquement pour les roles autorises (DGI Compliance Settings -> Override Roles). Force l'enregistrement malgre une combinaison bloquee.",
+  "description": "Ignore les matrices de validation (A-G) uniquement. N'autorise JAMAIS une soumission sans normalisation DGI.",
   "no_copy": 1
  },
  {
@@ -403,5 +403,130 @@
   "options": "DGI Point of Sale",
   "insert_after": "company",
   "description": "Rattache ce profil POS a un point de vente DGI (NID/Token, Matrice A)."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_mode_of_payment",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_mode_of_payment",
+  "label": "Mode de paiement",
+  "fieldtype": "Link",
+  "options": "Mode of Payment",
+  "insert_after": "custom_dgi_export",
+  "description": "Mode de paiement transmis a la DGI et imprime. Si vide: lignes de paiement POS, puis echeancier, puis Default Payment Type des parametres DGI."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_normalized_on",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_normalized_on",
+  "label": "Normalisee le",
+  "fieldtype": "Datetime",
+  "insert_after": "custom_dgi_datetime",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1,
+  "in_standard_filter": 0
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_operator",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_operator",
+  "label": "Operateur DGI",
+  "fieldtype": "Link",
+  "options": "User",
+  "insert_after": "custom_dgi_normalized_on",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_operator_name",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_operator_name",
+  "label": "Nom de l'operateur",
+  "fieldtype": "Data",
+  "insert_after": "custom_dgi_operator",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_payload_hash",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_payload_hash",
+  "label": "Empreinte DGI",
+  "fieldtype": "Data",
+  "insert_after": "custom_dgi_last_printed_on",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1,
+  "hidden": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-custom_dgi_response",
+  "dt": "Sales Invoice",
+  "fieldname": "custom_dgi_response",
+  "label": "Echange e-MCF (JSON)",
+  "fieldtype": "Long Text",
+  "insert_after": "custom_dgi_payload_hash",
+  "read_only": 1,
+  "allow_on_submit": 1,
+  "no_copy": 1,
+  "hidden": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice Item-dgi_specific_tax",
+  "dt": "Sales Invoice Item",
+  "fieldname": "dgi_specific_tax",
+  "label": "Taxe specifique DGI",
+  "fieldtype": "Data",
+  "insert_after": "item_tax_template",
+  "fetch_from": "item_code.dgi_specific_tax",
+  "fetch_if_empty": 1,
+  "description": "Montant par unite en CDF (ex. 230) ou pourcentage (ex. 10%). Inclus dans le prix de la ligne."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Item-dgi_specific_tax",
+  "dt": "Item",
+  "fieldname": "dgi_specific_tax",
+  "label": "Taxe specifique DGI",
+  "fieldtype": "Data",
+  "insert_after": "dgi_item_type",
+  "description": "Montant par unite en CDF (ex. 230) ou pourcentage (ex. 10%), inclus dans le prix de vente HT."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Item-dgi_hors_champ",
+  "dt": "Item",
+  "fieldname": "dgi_hors_champ",
+  "label": "Hors champ TVA (DGI)",
+  "fieldtype": "Check",
+  "insert_after": "dgi_specific_tax",
+  "description": "Operation hors champ: le code article transmis a la DGI sera 'HORS CHAMP' (communique DGI n°010)."
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Company-dgi_rccm",
+  "dt": "Company",
+  "fieldname": "dgi_rccm",
+  "label": "RCCM",
+  "fieldtype": "Data",
+  "insert_after": "tax_id"
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Company-dgi_id_nat",
+  "dt": "Company",
+  "fieldname": "dgi_id_nat",
+  "label": "Id. Nat.",
+  "fieldtype": "Data",
+  "insert_after": "dgi_rccm"
  }
 ]

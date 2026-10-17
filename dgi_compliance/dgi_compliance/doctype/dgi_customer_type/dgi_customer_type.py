@@ -1,4 +1,3 @@
-import frappe
 from frappe.model.document import Document
 
 # Map each "req_*" field on this DocType to the Sales-Invoice / Customer attribute that

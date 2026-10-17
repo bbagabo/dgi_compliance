@@ -2,8 +2,8 @@
 """Tests de l'agent MCF (sans materiel): framing exact du protocole MCF-SFE v1.0,
 echappement, NAK/SYN, flux complet de facture sur un MCF simule, et garde-fous.
 Executer: python test_mcf_agent.py"""
-import sys
-import types
+
+
 
 import mcf_agent as A
 
