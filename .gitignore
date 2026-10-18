@@ -8,3 +8,4 @@ node_modules/
 
 mcf_agent/mcf_agent_config.json
 .pytest_cache/
+dump.rdb

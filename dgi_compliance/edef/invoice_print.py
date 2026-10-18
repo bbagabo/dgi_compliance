@@ -328,6 +328,11 @@ def dgi_invoice_context(doc):
         payments = [{"label": str(e)[:80], "type_label": "", "amount": 0.0, "amount_cdf": 0.0, "source": "error"}]
 
     foreign = _is_foreign(doc)
+    if not foreign:
+        # Printed payments = printed fiscal total (same rounding absorption as the e-MCF request).
+        from dgi_compliance.edef.payments import align_to_fiscal_total
+        for key in ("amount", "amount_cdf"):
+            align_to_fiscal_total(payments, totals["ttc"], key)
     from dgi_compliance.edef.mapper import _cur_rate
     cur_rate = flt(_cur_rate(doc)) if foreign else 1.0
     cdf_ttc = fiscal["total"] if fiscal["source"] == "e-MCF" else abs(flt(doc.get("base_grand_total")))

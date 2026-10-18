@@ -67,3 +67,28 @@ class TestWords(unittest.TestCase):
         self.assertEqual(number_to_words(71), "soixante et onze")
         self.assertEqual(number_to_words(1000), "mille")
         self.assertEqual(number_to_words(200000000), "deux cents millions")
+
+
+class TestPaymentAlignment(unittest.TestCase):
+    """v5.0.1: sum of the payments = fiscal total (SFE 1.1.19) despite ERPNext/e-MCF rounding."""
+
+    def test_usd_rounding_gap_absorbed(self):
+        from dgi_compliance.edef.payments import align_to_fiscal_total
+        # 2 x 300 USD (B 16 %) + 150 USD (C 5 %) at 2 830.75: ERPNext 2 416 045.12, e-MCF rules .13
+        items = [{"taxGroup": "B", "price": 849225.0, "quantity": 2},
+                 {"taxGroup": "C", "price": 424612.5, "quantity": 1}]
+        total = compute_totals(items, "ht", {"B": 16.0, "C": 5.0})["total"]
+        self.assertEqual(total, 2416045.13)
+        rows = align_to_fiscal_total([{"name": "ESPECES", "amount": 2416045.12}], total)
+        self.assertEqual(rows[0]["amount"], 2416045.13)
+
+    def test_gap_goes_to_credit_line(self):
+        from dgi_compliance.edef.payments import align_to_fiscal_total
+        rows = align_to_fiscal_total([{"name": "ESPECES", "amount": 4000.0},
+                                      {"name": "CREDIT", "amount": 7600.0}], 11600.02)
+        self.assertEqual([r["amount"] for r in rows], [4000.0, 7600.02])
+
+    def test_real_difference_untouched(self):
+        from dgi_compliance.edef.payments import align_to_fiscal_total
+        rows = align_to_fiscal_total([{"type": "ESPECES", "amount": 1000.0}], 1150.0)
+        self.assertEqual(rows[0]["amount"], 1000.0)

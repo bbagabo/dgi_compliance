@@ -76,6 +76,28 @@ def invoice_totals(doc):
     return abs(flt(doc.get("grand_total"))), abs(flt(doc.get("base_grand_total")))
 
 
+MAX_ROUNDING_GAP = 1.0  # CDF
+
+
+def align_to_fiscal_total(rows, total, key="amount", max_gap=MAX_ROUNDING_GAP):
+    """SFE 1.1.19 (total = sum of the payments) on the FISCAL total.
+
+    ERPNext rounds VAT to the nearest centime; the e-MCF rounds it up (SFE 1.5). With an exchange
+    rate the CDF amounts rarely fall on round figures, so the ERPNext total can differ from the
+    fiscal total by a few centimes. Such a rounding gap (<= max_gap) is absorbed by the CREDIT line
+    if there is one, otherwise by the largest line. A larger gap is left untouched: it is a real
+    difference, reported by the amount check before CONFIRM."""
+    if not rows:
+        return rows
+    gap = round2(flt(total) - sum(flt(r.get(key)) for r in rows))
+    if abs(gap) < 0.005 or abs(gap) > max_gap:
+        return rows
+    target = next((r for r in rows if (r.get("name") or r.get("type")) == "CREDIT"), None) \
+        or max(rows, key=lambda r: flt(r.get(key)))
+    target[key] = round2(flt(target.get(key)) + gap)
+    return rows
+
+
 def _adjust_to_total(lines, total_txn, total_cdf, settings, source):
     """Make the lines add up to the invoice total: change deducted, remainder as CREDIT."""
     paid_txn = sum(ln["amount"] for ln in lines)

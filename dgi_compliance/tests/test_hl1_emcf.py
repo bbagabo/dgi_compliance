@@ -156,13 +156,25 @@ class TestNormalisation(HL1Base):
             ctx = frappe.get_attr("dgi_compliance.edef.invoice_print.dgi_invoice_context")(si)
             self.assertEqual(ctx["cur_rate_txt"], "2 350.50")
             html = frappe.get_print("Sales Invoice", si.name, "DGI Facture Normalisee")
-            self.assertIn("taux de la facture : 1 USD = 2 350.50 CDF", html)
+            self.assertIn("Taux de change de la facture : 1 USD = 2 350.50 CDF", html)
         finally:
             s = frappe.get_single("DGI Compliance Settings")
             s.set("currency_rules", [{k: r.get(k) for k in ("currency", "invoice_type", "is_allowed",
                                                          "rate_source", "manual_rate", "notes")} for r in saved])
             s.flags.ignore_mandatory = True
             s.save(ignore_permissions=True)
+
+    def test_T06_usd_payments_equal_fiscal_total(self):
+        """Rate with decimals: ERPNext total 2 416 045.12 CDF, fiscal total (VAT rounded up) .13.
+        The payments transmitted add up to the fiscal total (SFE 1.1.19)."""
+        si = fx.make_invoice("CLIENT USD SARL", [("DGI-B-LAIT", 2, 300), ("DGI-C-FARINE", 1, 150)],
+                             currency="USD", rate=2830.75, submit=True)
+        si = self.assertNormalized(si)
+        req, resp = self.request_of(si), self.response_of(si)
+        self.assertEqual(req["curRate"], 2830.75)
+        self.assertEqual(resp["total"], 2416045.13)
+        self.assertAlmostEqual(sum(p["amount"] for p in req["payment"]), resp["total"], places=2)
+        self.assertTrue(all(p["currencyRate"] == 2830.75 for p in req["payment"]))
 
     def test_T06_usd_amount_mismatch_cancelled(self):
         """Amounts recomputed by the e-MCF differ from the SFE beyond the tolerance -> the request is

@@ -19,8 +19,23 @@ référence est abandonnée.
   d'autoriser ou de refuser une devise par type de facture.
 - Le taux publié par l'e-MCF (`/api/info/currencyRates`) reste synchronisé à titre informatif
   seulement.
-- La facture imprimée affiche le taux exact transmis :
-  « taux de la facture : 1 USD = 2 850.00 CDF » (jusqu'à 6 décimales si le taux en comporte).
+- La facture imprimée affiche le taux exact transmis, dans « Devise » et sous l'équivalent CDF :
+  « Taux de change de la facture : 1 USD = 2 830.75 CDF » (jusqu'à 6 décimales si le taux en comporte).
+
+## Paiements = total fiscal (SFE 1.1.19)
+
+Avec un taux de change, les montants en CDF tombent rarement sur des chiffres ronds. ERPNext
+arrondit la TVA au centime le plus proche, alors que l'e-MCF l'arrondit au centime supérieur
+(SFE 1.5).
+
+Exemple : 2 × 300 USD (B) + 150 USD (C) au taux 2 830,75 :
+- total ERPNext : 2 416 045,12 CDF ;
+- total fiscal : 2 416 045,13 CDF.
+
+La somme des paiements transmis est désormais égale au total fiscal. L'écart d'arrondi (≤ 1 CDF)
+est porté par la ligne CREDIT, sinon par la ligne la plus importante. Les paiements imprimés sur une
+facture en CDF et les rapports X/Z suivent les mêmes montants. Un écart supérieur n'est pas
+corrigé : c'est une vraie différence, traitée par le contrôle des montants ci-dessous.
 
 ## Contrôle des montants (inchangé, confirmé)
 
@@ -36,7 +51,10 @@ Ce comportement est désormais testé aussi pour une facture en USD.
 ## Divers
 
 - Version de l'application imprimée en pied de facture et de rapport (`DGI Compliance v5.0.1`).
-- Tests : 50 tests d'intégration (+1), 9 unitaires, 12 agent MCF — tous réussis ; installation
-  neuve et mise à jour depuis une sauvegarde v4 rejouées.
+- Tests réussis :
+  - 51 tests d'intégration (+2) ;
+  - 12 tests unitaires (+3) ;
+  - 12 tests de l'agent MCF ;
+  - installation neuve et mise à jour depuis une sauvegarde v4, rejouées.
 - Aucune migration de données : un simple *Update* du site suffit. Les anciennes valeurs des
   champs supprimés restent en base sans effet.

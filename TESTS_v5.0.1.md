@@ -20,14 +20,18 @@ HTTP 401, réponse non JSON, réponse perdue après traitement, montants falsifi
 
 | Suite | Tests | Réussis | Échecs |
 |---|---|---|---|
-| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 50 | 50 | 0 |
-| `tests.test_calc_words` (unitaires) | 9 | 9 | 0 |
+| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 51 | 51 | 0 |
+| `tests.test_calc_words` (unitaires) | 12 | 12 | 0 |
 | `mcf_agent/test_mcf_agent.py` (agent MCF, hors périmètre, non-régression) | 12 | 12 | 0 |
 | Installation sur site neuf (`bench new-site --install-app dgi_compliance`) | 1 | 1 | 0 |
 | Mise à jour depuis une sauvegarde v4.0.0 (`restore` + `migrate`, patch v5_0) | 1 | 1 | 0 |
 
-v5.0.1 : le test « taux hors ±1 % refusé » est remplacé par deux tests (le taux de la facture est
-transmis ; un écart de montants au-delà de la tolérance annule la demande d'une facture en USD).
+v5.0.1 : le test « taux hors ±1 % refusé » est remplacé par trois tests d'intégration :
+- le taux de la facture est transmis ;
+- la somme des paiements est égale au total fiscal, même avec un taux à décimales ;
+- un écart de montants au-delà de la tolérance annule la demande d'une facture en USD.
+
+Trois tests unitaires couvrent l'alignement des paiements sur le total fiscal.
 
 Anomalie de la v4 détectée et corrigée pendant ces tests : l'installation sur un site neuf
 échouait (ISF obligatoire lors de l'initialisation des paramètres).
@@ -45,7 +49,7 @@ entrée du journal *DGI Exchange Log*, capture du portail de vérification DGI (
 | T03 | Remise ligne | 2 × lait −10 % | Soumettre | price 9 000, originalPrice 10 000, « Remise 10% » | test_T03_line_discount | Conforme | OK |
 | T04 | Remise globale | −5 % sur net (HT) et sur total (TTC) ; TTC sans remise | Soumettre | Total e-MCF = total ERPNext ; prix TTC saisi conservé | test_T04_* (3) | Conforme | OK |
 | T05 | Exonérée | 10 × eau (A) | Soumettre | vtotal = 0 | test_T05_exempt_invoice | Conforme | OK |
-| T06 | Devise étrangère | USD au taux 2 850 ; USD au taux 2 350,50 (loin du taux e-MCF 2 850, ancienne règle « Manuel » 3 000 présente) ; montants e-MCF falsifiés (+150) | Soumettre, imprimer | curCode USD, **curRate = taux saisi sur la facture** (2 350,50), prix en CDF = prix USD × ce taux, paiement currencyCode/currencyRate identiques ; taux imprimé « 1 USD = 2 350.50 CDF » ; écart de montants → CANCEL, facture non confirmée, non soumise | test_T06_* (3) | Conforme | OK |
+| T06 | Devise étrangère | USD au taux 2 850 ; USD au taux 2 350,50 (loin du taux e-MCF 2 850, ancienne règle « Manuel » 3 000 présente) ; USD au taux 2 830,75 (total ERPNext 2 416 045,12, total fiscal 2 416 045,13) ; montants e-MCF falsifiés (+150) | Soumettre, imprimer | curCode USD, **curRate = taux saisi sur la facture**, prix en CDF = prix USD × ce taux, paiement currencyCode/currencyRate identiques ; taux imprimé « 1 USD = 2 350.50 CDF » ; somme des paiements = total fiscal (2 416 045,13) ; écart de montants → CANCEL, facture non confirmée, non soumise | test_T06_* (4) | Conforme | OK |
 | T07 | Paiement partiel | POS, espèces 4 000 / 11 600 | Soumettre | ESPECES 4 000 + CREDIT 7 600 | test_T07_partial_payment_pos | Conforme | OK |
 | T08 | Payée intégralement | POS espèces + carte ; POS soumis en un appel ; échecs | Soumettre | Somme = total ; soumission directe normalisée ; aucun orphelin DGI si échec | test_T08_* (4) | Conforme | OK |
 | T09 | À crédit / mode choisi | Mode « Wire Transfer » ; mode non mappé | Soumettre | VIREMENT transmis et imprimé ; mode non mappé bloquant | test_T09_* (2) | Conforme | OK |

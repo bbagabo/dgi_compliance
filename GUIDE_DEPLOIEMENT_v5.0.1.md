@@ -14,14 +14,19 @@ déploiement de l'application puis la migration du site.
 ## 2. Publier le code sur GitHub (terminal Ubuntu WSL)
 
 Le paquet livré contient `dgi_compliance_v5.0.1.bundle` (historique Git complet de la branche).
-Bloc unique à coller dans le terminal Ubuntu (WSL) : il importe la branche
+Enregistrer ce fichier dans `Documents\Claude\Projects\ERPNext Updat` ou laisser le dans
+`Téléchargements`. Bloc unique à coller dans le terminal Ubuntu (WSL) : il importe la branche
 `feature/HL1-compliance-review` depuis le bundle, vérifie la version puis la pousse sur GitHub.
 
 ```bash
 bash <<'EOF2'
 set -euo pipefail
 REPO="/mnt/c/Users/HP/Documents/GitHub/dgi_compliance"
-BUNDLE="/mnt/c/Users/HP/Documents/Claude/Projects/ERPNext Updat/dgi_compliance_v5.0.1.bundle"
+BUNDLE=""
+for B in "/mnt/c/Users/HP/Documents/Claude/Projects/ERPNext Updat/dgi_compliance_v5.0.1.bundle" \
+         "/mnt/c/Users/HP/Downloads/dgi_compliance_v5.0.1.bundle"; do [ -f "$B" ] && { BUNDLE="$B"; break; }; done
+[ -n "$BUNDLE" ] || { echo "ERREUR: dgi_compliance_v5.0.1.bundle introuvable"; exit 1; }
+echo "Bundle: $BUNDLE"
 git config --global --add safe.directory "$REPO" 2>/dev/null || true
 cd "$REPO"; git config core.fileMode false
 [ -z "$(git status --porcelain)" ] || { echo "ERREUR: modifications locales non validees"; git status; exit 1; }
@@ -87,9 +92,11 @@ Les rapports sont accessibles par la recherche : **DGI Rapport Fiscal** → *Gé
 1. **DGI > Tester la connexion DGI** dans DGI Compliance Settings.
 2. Facture FV en CDF → *Normaliser (DGI)* → soumettre → imprimer → vérifier sur
    `https://developper.dgirdc.cd/sygdef/verification`.
-3. Facture en USD (taux saisi, ex. 2 850) → équivalent CDF sous le Net à payer avec « taux de la
-   facture : 1 USD = 2 850.00 CDF », montant en lettres en francs congolais ; même taux visible sur le
-   portail DGI.
+3. Facture en USD (taux saisi, ex. 2 830,75) :
+   - l'équivalent CDF apparaît sous le Net à payer, avec « Taux de change de la facture :
+     1 USD = 2 830.75 CDF » ;
+   - le montant en lettres est en francs congolais ;
+   - le même taux est visible sur le portail DGI.
 4. Avoir RAN sur la facture du point 2.
 5. Rapports X quotidien, Z et A.
 6. Dérouler la campagne `TESTS_v5.0.1.md` (cas DGI 1 à 29, R01 à R03) en mode HT et TTC.

@@ -22,9 +22,9 @@ from frappe.utils import flt, get_datetime
 
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef.calc import (
-    VAT_ONLY_GROUPS, round2, round3, split_specific_tax, parse_specific_tax,
+    VAT_ONLY_GROUPS, compute_totals, round2, round3, split_specific_tax, parse_specific_tax,
 )
-from dgi_compliance.edef.payments import PaymentTypeMappingError, resolve_payment_lines
+from dgi_compliance.edef.payments import PaymentTypeMappingError, align_to_fiscal_total, resolve_payment_lines
 
 __all__ = ["PaymentTypeMappingError"]
 
@@ -323,6 +323,12 @@ def credit_reference(doc):
 # Request
 # --------------------------------------------------------------------------- #
 
+def fiscal_total(items, mode):
+    """Invoice total computed with the e-MCF rules (SFE 1.5) from the request items."""
+    rates = {it.get("taxGroup"): group_rate(it.get("taxGroup")) for it in items or []}
+    return compute_totals(items or [], mode, rates)["total"]
+
+
 def build_invoice_request(doc):
     settings = get_settings()
     mode = price_mode(doc, settings)
@@ -340,7 +346,7 @@ def build_invoice_request(doc):
         dto["client"] = client
     payments = _payments(doc, settings)
     if payments:
-        dto["payment"] = payments
+        dto["payment"] = align_to_fiscal_total(payments, fiscal_total(dto["items"], mode))
     if dto["type"] in CREDIT_TYPES:
         ref, nature = credit_reference(doc)
         dto["reference"] = ref
