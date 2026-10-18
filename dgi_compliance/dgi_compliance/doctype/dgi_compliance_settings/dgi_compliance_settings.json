@@ -120,7 +120,7 @@
    "fieldname": "sb_hl1",
    "fieldtype": "Section Break",
    "label": "Controles e-MCF (v5.0.0)",
-   "description": "Verification par le SFE des montants calcules par l'e-MCF avant confirmation (API e-MCF v1.3) et controle du taux de change (SFE 1.1.30)."
+   "description": "Verification par le SFE des montants calcules par l'e-MCF avant confirmation (API e-MCF v1.3). Au-dela de la tolerance, la demande est annulee et la facture n'est pas confirmee."
   },
   {
    "fieldname": "emcf_check_action",
@@ -148,20 +148,6 @@
   {
    "fieldname": "cb_hl1",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "usd_rate_control",
-   "fieldtype": "Select",
-   "label": "Controle du taux de change",
-   "options": "Bloquer\nAlerte\nDesactive",
-   "default": "Bloquer",
-   "description": "Compare le taux de la facture au taux de reference publie par l'e-MCF (/api/info/currencyRates, synchronise)."
-  },
-  {
-   "fieldname": "usd_rate_max_deviation",
-   "fieldtype": "Percent",
-   "label": "Ecart maximal du taux (%)",
-   "default": "1"
   },
   {
    "fieldname": "default_point_of_sale",

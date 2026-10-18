@@ -1,4 +1,4 @@
-# Rapport de tests — DGI Compliance v5.0.0 (HL1)
+# Rapport de tests — DGI Compliance v5.0.1 (HL1)
 
 ## 1. Environnement d'exécution
 
@@ -8,7 +8,7 @@
 | Python / MariaDB | 3.14.6 / 10.11 |
 | Site | site de test dédié, société « DGI Test SARL » (CDF, RDC, exercice 2026) |
 | e-MCF | **simulé** (`dgi_compliance/tests/emcf_simulator.py`) : aucun appel réel à la DGI |
-| Date | 17/10/2026 |
+| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) |
 
 Le simulateur reproduit le comportement documenté de l'API e-MCF v1.3 : demandes en attente
 (10 maximum, erreur 63), recalcul des montants par groupe, contrôles de CONFIRM (erreurs 50/51),
@@ -20,11 +20,14 @@ HTTP 401, réponse non JSON, réponse perdue après traitement, montants falsifi
 
 | Suite | Tests | Réussis | Échecs |
 |---|---|---|---|
-| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 49 | 49 | 0 |
+| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 50 | 50 | 0 |
 | `tests.test_calc_words` (unitaires) | 9 | 9 | 0 |
 | `mcf_agent/test_mcf_agent.py` (agent MCF, hors périmètre, non-régression) | 12 | 12 | 0 |
 | Installation sur site neuf (`bench new-site --install-app dgi_compliance`) | 1 | 1 | 0 |
 | Mise à jour depuis une sauvegarde v4.0.0 (`restore` + `migrate`, patch v5_0) | 1 | 1 | 0 |
+
+v5.0.1 : le test « taux hors ±1 % refusé » est remplacé par deux tests (le taux de la facture est
+transmis ; un écart de montants au-delà de la tolérance annule la demande d'une facture en USD).
 
 Anomalie de la v4 détectée et corrigée pendant ces tests : l'installation sur un site neuf
 échouait (ISF obligatoire lors de l'initialisation des paramètres).
@@ -42,7 +45,7 @@ entrée du journal *DGI Exchange Log*, capture du portail de vérification DGI (
 | T03 | Remise ligne | 2 × lait −10 % | Soumettre | price 9 000, originalPrice 10 000, « Remise 10% » | test_T03_line_discount | Conforme | OK |
 | T04 | Remise globale | −5 % sur net (HT) et sur total (TTC) ; TTC sans remise | Soumettre | Total e-MCF = total ERPNext ; prix TTC saisi conservé | test_T04_* (3) | Conforme | OK |
 | T05 | Exonérée | 10 × eau (A) | Soumettre | vtotal = 0 | test_T05_exempt_invoice | Conforme | OK |
-| T06 | Devise étrangère | USD, taux 2 850 ; taux 2 350 (hors tolérance) | Soumettre | curCode/curRate, prix en CDF, paiement currencyCode ; taux hors ±1 % refusé | test_T06_* (2) | Conforme | OK |
+| T06 | Devise étrangère | USD au taux 2 850 ; USD au taux 2 350,50 (loin du taux e-MCF 2 850, ancienne règle « Manuel » 3 000 présente) ; montants e-MCF falsifiés (+150) | Soumettre, imprimer | curCode USD, **curRate = taux saisi sur la facture** (2 350,50), prix en CDF = prix USD × ce taux, paiement currencyCode/currencyRate identiques ; taux imprimé « 1 USD = 2 350.50 CDF » ; écart de montants → CANCEL, facture non confirmée, non soumise | test_T06_* (3) | Conforme | OK |
 | T07 | Paiement partiel | POS, espèces 4 000 / 11 600 | Soumettre | ESPECES 4 000 + CREDIT 7 600 | test_T07_partial_payment_pos | Conforme | OK |
 | T08 | Payée intégralement | POS espèces + carte ; POS soumis en un appel ; échecs | Soumettre | Somme = total ; soumission directe normalisée ; aucun orphelin DGI si échec | test_T08_* (4) | Conforme | OK |
 | T09 | À crédit / mode choisi | Mode « Wire Transfer » ; mode non mappé | Soumettre | VIREMENT transmis et imprimé ; mode non mappé bloquant | test_T09_* (2) | Conforme | OK |
@@ -90,7 +93,7 @@ il faut deux factures par cas : modèle « TVA incluse » et modèle « TVA en s
 | 18 | Groupes F et G | Taux 16 % et 5 % |
 | 19–24 | Groupes H, I, J, K, L, M + N (articles TAX pour L et N) | Groupes et types d'article |
 | 25 | Remise 10 % (B), remise de 300 CDF (A) | originalPrice, « Remise » |
-| 26 | Facture en USD | Équivalent CDF sous le Net à payer, lettres en francs congolais |
+| 26 | Facture en USD (taux saisi sur la facture) | Équivalent CDF sous le Net à payer, taux imprimé = taux saisi = taux affiché par le portail DGI, lettres en francs congolais |
 | 27–28 | Groupes O (1 %) et P | Taux 1 % |
 | 29 | Article coché *Hors champ TVA (DGI)* (groupe A) | Code d'article « HORS CHAMP » |
 | R01–R03 | DGI Rapport Fiscal → X quotidien, Z, A | Tous les éléments du rapport |

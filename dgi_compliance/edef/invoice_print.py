@@ -299,6 +299,13 @@ def security_block(doc):
     }
 
 
+def _rate_text(rate):
+    """Exchange rate exactly as transmitted (up to 6 decimals, at least 2): 2 850.00 / 2 850.5525."""
+    txt = f"{flt(rate):,.6f}".rstrip("0")
+    whole, _, dec = txt.partition(".")
+    return f"{whole.replace(',', ' ')}.{dec.ljust(2, '0')}"
+
+
 @frappe.whitelist()
 def dgi_invoice_context(doc):
     """Single Jinja entry point used by the print format."""
@@ -345,7 +352,9 @@ def dgi_invoice_context(doc):
     operator_name = doc.get("custom_dgi_operator_name") or frappe.utils.get_fullname(operator_id) or operator_id
     posting_time = format_time(doc.get("posting_time")) if doc.get("posting_time") else ""
 
+    from dgi_compliance import __version__
     return {
+        "app_version": __version__,
         "normalized": doc.get("custom_dgi_status") == "Normalized" and bool(doc.get("custom_dgi_code_def")),
         "title": title,
         "export": export,
@@ -376,7 +385,7 @@ def dgi_invoice_context(doc):
         "payments": payments,
         "foreign": foreign,
         "cur_rate": cur_rate,
-        "cur_rate_txt": f"{cur_rate:,.2f}".replace(",", " "),
+        "cur_rate_txt": _rate_text(cur_rate),
         "cdf": {"ttc": cdf_ttc, "vat": cdf_vat, "ht": round2(cdf_ttc - cdf_vat - flt(fiscal.get("ts"))),
                 "source": fiscal["source"]},
         "amount_in_words": amount_in_words_cdf(cdf_ttc),

@@ -163,8 +163,6 @@ def _settings():
     s.emcf_check_action = "Bloquer"
     s.emcf_check_tolerance = 1
     s.dgi_total_tolerance = 1
-    s.usd_rate_control = "Bloquer"
-    s.usd_rate_max_deviation = 1
     s.default_payment_type = "ESPECES"
     s.currency_enforcement = "Enforce"
     s.validation_enforcement = "Enforce"

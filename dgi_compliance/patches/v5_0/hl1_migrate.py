@@ -24,8 +24,6 @@ def _settings():
         "emcf_check_action": "Bloquer",
         "emcf_check_tolerance": 1,
         "finalize_action_case": "minuscules",
-        "usd_rate_control": "Bloquer",
-        "usd_rate_max_deviation": 1,
     }
     for field, value in values.items():
         current = frappe.db.get_single_value("DGI Compliance Settings", field)

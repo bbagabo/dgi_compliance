@@ -1,4 +1,4 @@
-# dgi_compliance — v5.0.0 (HL1)
+# dgi_compliance — v5.0.1 (HL1)
 
 Application Frappe indépendante qui met ERPNext v16 en conformité avec la **facture normalisée**
 de la DGI (RDC) et normalise les factures de vente via l'**e-MCF** (API e-MCF v1.3).
@@ -9,11 +9,11 @@ Fonctions principales :
 - normalisation e-MCF à la soumission (verrou sans exception), reprise sans doublon, contrôle des
   montants avant confirmation, journal électronique ;
 - groupes de taxation A–Z (FACNO v2.0), taxe spécifique, avoirs FA/EA (COR, RAN, RAM, RRR),
-  export, acompte, USD avec contrôle du taux ;
+  export, acompte, devises (USD) au taux de change saisi sur la facture ;
 - format **DGI Facture Normalisee** (toutes les mentions obligatoires, point de vente, équivalent
   CDF et montant en lettres en francs congolais) ;
 - rapports **X, Z et A** (DocType *DGI Rapport Fiscal*) ;
 - mode MCF physique (USB) hérité de la v4 — hors périmètre de l'homologation HL1.
 
-Documents : `WHATS_NEW_5.0.0.md` (nouveautés), `GUIDE_DEPLOIEMENT_v5.0.0.md` (Frappe Cloud),
-`TESTS_v5.0.0.md` (rapport de tests). Historique : `WHATS_NEW_*.md`.
+Documents : `WHATS_NEW_5.0.1.md` et `WHATS_NEW_5.0.0.md` (nouveautés), `GUIDE_DEPLOIEMENT_v5.0.1.md`
+(Frappe Cloud), `TESTS_v5.0.1.md` (rapport de tests). Historique : `WHATS_NEW_*.md`.

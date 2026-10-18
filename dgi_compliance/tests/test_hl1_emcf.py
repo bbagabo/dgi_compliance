@@ -1,4 +1,4 @@
-"""Integration tests v5.0.0 (HL1) - e-MCF flow, invoice print, X/Z/A reports.
+"""Integration tests v5.0.x (HL1) - e-MCF flow, invoice print, X/Z/A reports.
 
 Run on a TEST site (data is committed by the normalization flow):
     bench --site <site> set-config allow_tests true
@@ -133,9 +133,53 @@ class TestNormalisation(HL1Base):
         self.assertEqual(req["payment"][0]["currencyCode"], "USD")
         self.assertNotIn("curCode", req["payment"][0])
 
-    def test_T06_usd_rate_outside_tolerance_blocked(self):
+    def test_T06_invoice_rate_is_transmitted(self):
+        """v5.0.1: the rate sent to the e-MCF (curRate, payment currencyRate, CDF prices) is ALWAYS the
+        exchange rate entered on the invoice, even far from the e-MCF reference rate (2 850) and even
+        when an old Currency Rule says 'Manuel'. No +/-1 % control any more."""
+        s = frappe.get_single("DGI Compliance Settings")
+        saved = [r.as_dict() for r in s.currency_rules]
+        s.append("currency_rules", {"currency": "USD", "invoice_type": "Any", "is_allowed": 1,
+                                    "rate_source": "Manuel", "manual_rate": 3000})
+        s.flags.ignore_mandatory = True
+        s.save(ignore_permissions=True)
+        try:
+            si = fx.make_invoice("CLIENT USD SARL", [("DGI-B-LAIT", 1, 10)], currency="USD", rate=2350.5,
+                                 submit=True)
+            si = self.assertNormalized(si)
+            req = self.request_of(si)
+            self.assertEqual(req["curCode"], "USD")
+            self.assertEqual(req["curRate"], 2350.5)
+            self.assertEqual(req["items"][0]["price"], 23505.0)
+            self.assertEqual(req["payment"][0]["currencyRate"], 2350.5)
+            self.assertAlmostEqual(self.response_of(si)["total"], flt(si.base_grand_total), delta=1)
+            ctx = frappe.get_attr("dgi_compliance.edef.invoice_print.dgi_invoice_context")(si)
+            self.assertEqual(ctx["cur_rate_txt"], "2 350.50")
+            html = frappe.get_print("Sales Invoice", si.name, "DGI Facture Normalisee")
+            self.assertIn("taux de la facture : 1 USD = 2 350.50 CDF", html)
+        finally:
+            s = frappe.get_single("DGI Compliance Settings")
+            s.set("currency_rules", [{k: r.get(k) for k in ("currency", "invoice_type", "is_allowed",
+                                                         "rate_source", "manual_rate", "notes")} for r in saved])
+            s.flags.ignore_mandatory = True
+            s.save(ignore_permissions=True)
+
+    def test_T06_usd_amount_mismatch_cancelled(self):
+        """Amounts recomputed by the e-MCF differ from the SFE beyond the tolerance -> the request is
+        cancelled (CANCEL) and the invoice is neither confirmed nor submitted."""
+        self.sim.tamper_total = 150.0
+        si = fx.make_invoice("CLIENT USD SARL", [("DGI-B-LAIT", 1, 10)], currency="USD", rate=2350.5)
+        cancels, confirms = self.sim.count("PUT", "cancel"), self.sim.count("PUT", "confirm")
         with self.assertRaises(frappe.ValidationError):
-            fx.make_invoice("CLIENT USD SARL", [("DGI-B-LAIT", 1, 10)], currency="USD", rate=2350)
+            si.submit()
+        si = reload(si)
+        self.assertEqual(si.docstatus, 0)
+        self.assertIn("differents", si.custom_dgi_error)
+        self.assertFalse(si.custom_dgi_uid)
+        self.assertFalse(si.custom_dgi_code_def)
+        self.assertEqual(len(self.sim.pending), 0)
+        self.assertEqual(self.sim.count("PUT", "cancel"), cancels + 1)
+        self.assertEqual(self.sim.count("PUT", "confirm"), confirms)
 
     # ---------- T07 / T08: POS payments ----------
     def test_T07_partial_payment_pos(self):

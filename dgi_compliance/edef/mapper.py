@@ -270,26 +270,15 @@ def _foreign_ccy(doc):
 
 
 def _cur_rate(doc):
-    """CDF per 1 unit of the foreign currency (currency rule, then the invoice rate)."""
-    ccy = doc.get("currency")
-    settings = get_settings()
-    rule = settings.currency_rule_for(ccy, _invoice_type(doc, settings))
-    if rule:
-        src = (rule.get("rate_source") or "ERPNext")
-        if src == "Manuel" and flt(rule.get("manual_rate")) > 0:
-            return flt(rule.get("manual_rate"))
-        if src in ("DGI Officiel", "DGI Official"):
-            off = frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value")
-            if off:
-                return flt(off)
+    """CDF per 1 unit of the foreign currency: ALWAYS the exchange rate entered on the invoice
+    (Sales Invoice.conversion_rate). The SFE transmits the rate it used: the CDF prices sent to the
+    e-MCF are the invoice base amounts, computed with this same rate."""
     rate = flt(doc.get("conversion_rate"))
     if rate > 0:
         return rate
     gt = abs(flt(doc.get("grand_total")))
     bgt = abs(flt(doc.get("base_grand_total")))
-    if gt:
-        return round(bgt / gt, 6)
-    return flt(frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value"))
+    return round(bgt / gt, 9) if gt else 0.0
 
 
 def _currency_block(doc, dto):

@@ -528,40 +528,12 @@ def validate_sales_invoice(doc, method=None):
     frappe.throw(msg + "<br><br>" + hint, title=_("Combinaison non conforme DGI"))
 
 
-def _check_rate_deviation(doc, settings):
-    """SFE 1.1.30: the exchange rate must stay within 1% of the reference rate (BCC average
-    rate as published by the e-MCF /api/info/currencyRates, synchronised in DGI Reference Value)."""
-    control = getattr(settings, "usd_rate_control", None) or "Bloquer"
-    if control == "Desactive":
-        return
-    from dgi_compliance.edef.mapper import _foreign_ccy, _cur_rate
-    ccy = _foreign_ccy(doc)
-    if not ccy:
-        return
-    ref = flt(frappe.db.get_value("DGI Reference Value", f"Currency Rate::{ccy}", "value"))
-    if not ref:
-        return
-    used = flt(_cur_rate(doc))
-    deviation = abs(used - ref) / ref
-    limit = flt(getattr(settings, "usd_rate_max_deviation", None) or 1.0) / 100.0
-    if deviation <= limit:
-        return
-    msg = _("Taux de change {0} = {1} CDF: ecart de {2}% avec le taux de reference DGI/BCC ({3} CDF). "
-            "Ecart maximum autorise: {4}% (SFE 1.1.30).").format(
-        ccy, used, round(deviation * 100, 2), ref, round(limit * 100, 2))
-    if control == "Alerte":
-        frappe.msgprint(msg, indicator="orange", title=_("Taux de change DGI"))
-    else:
-        frappe.throw(msg, title=_("Taux de change hors tolerance"))
-
-
 def validate_currency(doc, method=None):
     """`validate` hook: enforce the DGI currency matrix (authorized currencies per invoice type).
     Independent from the A-G matrices switch; governed by Settings.currency_enforcement."""
     settings = get_settings()
     if not settings.enabled:
         return
-    _check_rate_deviation(doc, settings)
     mode = getattr(settings, "currency_enforcement", None) or "Enforce"
     if mode == "Off" or not (settings.currency_rules or []):
         return

@@ -1,4 +1,4 @@
-# Guide de déploiement — DGI Compliance v5.0.0 (HL1)
+# Guide de déploiement — DGI Compliance v5.0.1 (HL1)
 
 Architecture : Frappe Cloud, application installée depuis le dépôt GitHub `bbagabo/dgi_compliance`.
 Aucun fichier de Frappe ou d'ERPNext n'est modifié : la mise à jour se fait par un simple
@@ -13,7 +13,7 @@ déploiement de l'application puis la migration du site.
 
 ## 2. Publier le code sur GitHub (terminal Ubuntu WSL)
 
-Le paquet livré contient `dgi_compliance_v5.0.0.bundle` (historique Git complet de la branche).
+Le paquet livré contient `dgi_compliance_v5.0.1.bundle` (historique Git complet de la branche).
 Bloc unique à coller dans le terminal Ubuntu (WSL) : il importe la branche
 `feature/HL1-compliance-review` depuis le bundle, vérifie la version puis la pousse sur GitHub.
 
@@ -21,7 +21,7 @@ Bloc unique à coller dans le terminal Ubuntu (WSL) : il importe la branche
 bash <<'EOF2'
 set -euo pipefail
 REPO="/mnt/c/Users/HP/Documents/GitHub/dgi_compliance"
-BUNDLE="/mnt/c/Users/HP/Documents/Claude/Projects/ERPNext Updat/dgi_compliance_v5.0.0.bundle"
+BUNDLE="/mnt/c/Users/HP/Documents/Claude/Projects/ERPNext Updat/dgi_compliance_v5.0.1.bundle"
 git config --global --add safe.directory "$REPO" 2>/dev/null || true
 cd "$REPO"; git config core.fileMode false
 [ -z "$(git status --porcelain)" ] || { echo "ERREUR: modifications locales non validees"; git status; exit 1; }
@@ -29,7 +29,7 @@ git bundle verify "$BUNDLE" >/dev/null
 git checkout -q main
 git fetch -q "$BUNDLE" "+feature/HL1-compliance-review:feature/HL1-compliance-review"
 git checkout -q feature/HL1-compliance-review
-grep -q '__version__ = "5.0.0"' dgi_compliance/__init__.py && echo "Version 5.0.0 OK"
+grep -q '__version__ = "5.0.1"' dgi_compliance/__init__.py && echo "Version 5.0.1 OK"
 git log --oneline -8
 git push -u origin feature/HL1-compliance-review
 EOF2
@@ -39,7 +39,7 @@ Mise en production (après validation sur le site de test) :
 
 ```bash
 cd /mnt/c/Users/HP/Documents/GitHub/dgi_compliance && git checkout main && git merge --ff-only feature/HL1-compliance-review \
- && git tag -a v5.0.0 -m "dgi_compliance v5.0.0 (HL1)" && git push origin main v5.0.0
+ && git tag -a v5.0.1 -m "dgi_compliance v5.0.1 (HL1)" && git push origin main v5.0.1
 ```
 
 ## 3. Déployer sur Frappe Cloud
@@ -70,13 +70,14 @@ bench restart
 |---|---|
 | **Company** | Renseigner **RCCM**, **Id. Nat.**, **Tax ID (NIF)**, **Phone No**, **Email**, logo ; adresse de la société cochée *Is Your Company Address*. |
 | **DGI Compliance Settings** | Vérifier l'**ISF réel** (le gabarit « AAA-BB-NN » doit être remplacé), NIF, jeton. |
-| | Section **Contrôles e-MCF (v5.0.0)** : Action = *Bloquer*, Tolérance = 1 CDF, Contrôle du taux = *Bloquer* (1 %), Casse = *minuscules*, Point de vente par défaut. |
+| | Section **Contrôles e-MCF** : Action = *Bloquer* (obligatoire en production), Tolérance = 1 CDF, Casse = *minuscules*, Point de vente par défaut. Il n'y a plus de contrôle de taux de change (v5.0.1). |
 | | **Tolérance écart total ERPNext / e-MCF** : passer de 500 à **5 CDF** (500 était la valeur v4). |
-| | Bouton **DGI > Synchroniser TOUT** : charge les points de vente (code magasin, adresse, NID), les taux des groupes et le taux USD de référence. |
+| | Bouton **DGI > Synchroniser TOUT** : charge les points de vente (code magasin, adresse, NID) et les taux des groupes. Le taux USD publié par l'e-MCF est seulement informatif. |
 | | **Tax Group Mapping** : ajouter les groupes Q (8 %), R, S si utilisés. **Payment Mode Mapping** : chaque mode de paiement utilisé doit être mappé. |
 | **Item** | Champs *Taxe spécifique DGI* (ex. `230` ou `10%`) et *Hors champ TVA (DGI)* si nécessaire. |
 | **Customer** | *Type de client DGI* et NIF (PM, PC, PL : NIF obligatoire). |
 | **Sales Invoice** | Nouveau champ **Mode de paiement** (section DGI) : transmis à la DGI et imprimé ; sinon paiements POS / échéancier / défaut. |
+| | **Taux de change** (facture en USD) : c'est le taux saisi sur la facture (*Exchange Rate*) qui est transmis à la DGI (`curRate`, prix en CDF, paiements) et imprimé. Le vérifier avant la soumission : il ne peut plus être corrigé après la normalisation. |
 
 Le format **DGI Facture Normalisee** devient le format par défaut des factures de vente.
 Les rapports sont accessibles par la recherche : **DGI Rapport Fiscal** → *Générer*.
@@ -86,10 +87,12 @@ Les rapports sont accessibles par la recherche : **DGI Rapport Fiscal** → *Gé
 1. **DGI > Tester la connexion DGI** dans DGI Compliance Settings.
 2. Facture FV en CDF → *Normaliser (DGI)* → soumettre → imprimer → vérifier sur
    `https://developper.dgirdc.cd/sygdef/verification`.
-3. Facture en USD → équivalent CDF sous le Net à payer, montant en lettres en francs congolais.
+3. Facture en USD (taux saisi, ex. 2 850) → équivalent CDF sous le Net à payer avec « taux de la
+   facture : 1 USD = 2 850.00 CDF », montant en lettres en francs congolais ; même taux visible sur le
+   portail DGI.
 4. Avoir RAN sur la facture du point 2.
 5. Rapports X quotidien, Z et A.
-6. Dérouler la campagne `TESTS_v5.0.0.md` (cas DGI 1 à 29, R01 à R03) en mode HT et TTC.
+6. Dérouler la campagne `TESTS_v5.0.1.md` (cas DGI 1 à 29, R01 à R03) en mode HT et TTC.
 
 ## 6. Tests automatisés (bench de test uniquement)
 

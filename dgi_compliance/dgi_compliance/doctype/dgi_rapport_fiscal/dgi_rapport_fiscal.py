@@ -93,7 +93,8 @@ def dgi_report_context(doc):
     fmt = "%d/%m/%Y %H:%M:%S"
     def _dt(v):
         return get_datetime(v).strftime(fmt) if v else ""
-    return {"data": doc.get_data(), "groups": fr.GROUPS, "types": fr.INVOICE_TYPES,
+    from dgi_compliance import __version__
+    return {"app_version": __version__, "data": doc.get_data(), "groups": fr.GROUPS, "types": fr.INVOICE_TYPES,
             "kind": CODES.get(doc.report_type, "X"),
             "generated_on": _dt(doc.generated_on), "from": _dt(doc.from_datetime), "to": _dt(doc.to_datetime),
             "generated_by": frappe.utils.get_fullname(doc.generated_by) or doc.generated_by}

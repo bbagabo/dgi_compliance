@@ -39,7 +39,8 @@ Base : v4.0.0. Le mode MCF physique (USB) de la v4 est conservé mais hors péri
   prix unitaire identique à l'origine pour RAN/RAM, origine obligatoirement normalisée.
 - Commentaire A obligatoire pour un client AO ou un article du groupe D (référence d'exonération,
   imprimée « Réf. Exo. »).
-- Contrôle du taux de change USD : ±1 % du taux de référence publié par l'e-MCF (SFE 1.1.30).
+- ~~Contrôle du taux de change USD : ±1 % du taux de référence publié par l'e-MCF.~~
+  **Supprimé en v5.0.1** (obligation abandonnée par la DGI) : voir `WHATS_NEW_5.0.1.md`.
 - Lignes et factures à montant nul ou négatif refusées (SFE 1.1.21/1.1.22).
 - Messages d'erreur e-MCF traduits (table des codes 1 à 99), jeton invalide/expiré (HTTP 401) explicite.
 - Casse de l'action CONFIRM/CANCEL paramétrable (minuscules par défaut, comme la v4 validée en test).
@@ -91,4 +92,4 @@ Base : v4.0.0. Le mode MCF physique (USB) de la v4 est conservé mais hors péri
 ## 7. Tests
 
 - 49 tests d'intégration Frappe/ERPNext v16 (e-MCF simulé) + 9 tests unitaires + 12 tests agent MCF.
-- Voir `TESTS_v5.0.0.md`.
+- Voir `TESTS_v5.0.1.md` (rapport mis à jour en v5.0.1).
