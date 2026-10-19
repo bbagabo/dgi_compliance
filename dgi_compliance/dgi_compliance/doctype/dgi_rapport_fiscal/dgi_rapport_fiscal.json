@@ -150,13 +150,17 @@
    "fieldname": "sb_data",
    "fieldtype": "Section Break",
    "label": "Donnees",
-   "collapsible": 1
+   "collapsible": 1,
+   "hidden": 1
   },
   {
    "fieldname": "report_data",
    "label": "Donnees du rapport (JSON)",
    "fieldtype": "Long Text",
-   "read_only": 1
+   "read_only": 1,
+   "hidden": 1,
+   "print_hide": 1,
+   "description": "Donnees techniques du rapport (non imprimees) : voir le format d'impression DGI Rapport Fiscal."
   }
  ],
  "permissions": [
@@ -183,5 +187,7 @@
    "print": 1,
    "report": 1
   }
- ]
+ ],
+ "default_print_format": "DGI Rapport Fiscal",
+ "modified": "2026-10-19 18:00:00.000000"
 }

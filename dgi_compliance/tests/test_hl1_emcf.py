@@ -591,3 +591,49 @@ class TestFiscalReports(HL1Base):
         z.reload()
         with self.assertRaises(frappe.ValidationError):
             z.save()
+
+    def test_R04_print_layout_dgi_model(self):
+        """v5.0.2: the report prints with the DGI layout (e-UF model), never the raw JSON."""
+        self.assertEqual(frappe.get_meta("DGI Rapport Fiscal").default_print_format, "DGI Rapport Fiscal")
+        self.assertTrue(frappe.get_meta("DGI Rapport Fiscal").get_field("report_data").print_hide)
+        fx.make_invoice("CLIENT PM SARL", [("DGI-B-LAIT", 2, 10000), ("DGI-A-EAU", 1, 1500)], submit=True)
+        x = frappe.get_doc({"doctype": "DGI Rapport Fiscal", "report_type": "X périodique",
+                            "company": fx.COMPANY, "from_datetime": "2026-01-01 00:00:00"}).insert(
+                                ignore_permissions=True)
+        # Default print format of the DocType (no format passed), as the Print button does.
+        html = frappe.get_print("DGI Rapport Fiscal", x.name)
+        self.assertNotIn('"by_type"', html)
+        self.assertNotIn("Donnees du rapport", html)
+        for label in ("X rapport périodique", "Section 1: Totaux par type de facture",
+                      "Section 2: Totaux par groupe de taxation par type de facture",
+                      "Section 3: Totaux par type de paiement", "Section 4: Réductions", "Section 5:",
+                      "Date du rapport", "Début de période", "Fin de période", "ISF", "NIF"):
+            self.assertIn(label, html)
+        view = frappe.get_attr("dgi_compliance.dgi_compliance.doctype.dgi_rapport_fiscal."
+                               "dgi_rapport_fiscal.report_view")(x)
+        # Every invoice type lists the 19 groups A..S, even without invoices (DGI model).
+        self.assertEqual([t["type"] for t in view["types"]], ["FV", "FT", "FA", "EV", "ET", "EA"])
+        self.assertTrue(all([g["group"] for g in t["groups"]][:19] == list("ABCDEFGHIJKLMNOPQRS")
+                            for t in view["types"]))
+        fv = view["types"][0]
+        self.assertRegex(fv["total"], r"^\d{1,3}(\.\d{3})*,\d{2}$")
+        self.assertIn("ESPECES", [p["label"] for p in view["payments"]])
+        a = frappe.get_doc({"doctype": "DGI Rapport Fiscal", "report_type": "A",
+                            "company": fx.COMPANY}).insert(ignore_permissions=True)
+        html_a = frappe.get_print("DGI Rapport Fiscal", a.name)
+        self.assertIn(f"A rapport #{a.sequence_no}", html_a)
+        for label in ("Code", "Désignation", "Prix", "Groupe de taxation", "Taux d'impôt", "Quantité vendue",
+                      "Quantité retournée", "Quantité en stock"):
+            self.assertIn(label, html_a)
+        self.assertNotIn('"articles"', html_a)
+
+
+class TestReportNumberFormat(unittest.TestCase):
+    def test_dgi_number_format(self):
+        from dgi_compliance.dgi_compliance.doctype.dgi_rapport_fiscal.dgi_rapport_fiscal import _num, _qty
+        self.assertEqual(_num(59202298067.07), "59.202.298.067,07")
+        self.assertEqual(_num(0), "0,00")
+        self.assertEqual(_num(-1500.5), "-1.500,50")
+        self.assertEqual(_qty(2.375), "2,375")
+        self.assertEqual(_qty(10), "10")
+        self.assertEqual(_qty(1234.5), "1.234,5")

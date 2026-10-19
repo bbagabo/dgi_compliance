@@ -1,4 +1,4 @@
-# Guide de déploiement — DGI Compliance v5.0.1 (HL1)
+# Guide de déploiement — DGI Compliance v5.0.2 (HL1)
 
 Architecture : Frappe Cloud, application installée depuis le dépôt GitHub `bbagabo/dgi_compliance`.
 Aucun fichier de Frappe ou d'ERPNext n'est modifié : la mise à jour se fait par un simple
@@ -11,21 +11,30 @@ déploiement de l'application puis la migration du site.
 3. Vérifier qu'aucune facture n'est en cours de normalisation (rapport « Factures en attente de
    normalisation »).
 
-## 2. Publier le code sur GitHub (terminal Ubuntu WSL)
+## 2. Publier le code sur GitHub
 
-Le paquet livré contient `dgi_compliance_v5.0.1.bundle` (historique Git complet de la branche).
-Enregistrer ce fichier dans `Documents\Claude\Projects\ERPNext Updat` ou laisser le dans
-`Téléchargements`. Bloc unique à coller dans le terminal Ubuntu (WSL) : il importe la branche
-`feature/HL1-compliance-review` depuis le bundle, vérifie la version puis la pousse sur GitHub.
+Le paquet livré contient `dgi_compliance_v5.0.2.bundle` (historique Git complet de la branche).
+Enregistrer ce fichier dans `Documents\Claude\Projects\ERPNext Updat` ou le laisser dans
+`Téléchargements`. Les commandes ci-dessous importent la v5.0.2 dans `feature/HL1-compliance-review`,
+avancent `main` sans commit de fusion (fast-forward depuis la v5.0.1), vérifient la version puis
+poussent les deux branches. Elles s'arrêtent si le dépôt local contient des modifications non validées.
+
+**Option A — PowerShell (une seule commande)** :
+
+```powershell
+& { $ErrorActionPreference='Stop'; $r="$env:USERPROFILE\Documents\GitHub\dgi_compliance"; $b=@("$env:USERPROFILE\Documents\Claude\Projects\ERPNext Updat\dgi_compliance_v5.0.2.bundle","$env:USERPROFILE\Downloads\dgi_compliance_v5.0.2.bundle") | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $b) { throw 'dgi_compliance_v5.0.2.bundle introuvable' }; Set-Location $r; if (git status --porcelain) { throw 'Modifications locales non validees' }; function g { git @args; if ($LASTEXITCODE) { throw "git $args : echec" } }; g checkout -q main; g fetch -q $b '+feature/HL1-compliance-review:feature/HL1-compliance-review'; g merge --ff-only -q feature/HL1-compliance-review; if (-not (Select-String -Quiet -Path 'dgi_compliance\__init__.py' -Pattern '5.0.2')) { throw 'Version 5.0.2 absente' }; g log --oneline -3; g push origin main feature/HL1-compliance-review }
+```
+
+**Option B — terminal Ubuntu (WSL)** :
 
 ```bash
 bash <<'EOF2'
 set -euo pipefail
 REPO="/mnt/c/Users/HP/Documents/GitHub/dgi_compliance"
 BUNDLE=""
-for B in "/mnt/c/Users/HP/Documents/Claude/Projects/ERPNext Updat/dgi_compliance_v5.0.1.bundle" \
-         "/mnt/c/Users/HP/Downloads/dgi_compliance_v5.0.1.bundle"; do [ -f "$B" ] && { BUNDLE="$B"; break; }; done
-[ -n "$BUNDLE" ] || { echo "ERREUR: dgi_compliance_v5.0.1.bundle introuvable"; exit 1; }
+for B in "/mnt/c/Users/HP/Documents/Claude/Projects/ERPNext Updat/dgi_compliance_v5.0.2.bundle" \
+         "/mnt/c/Users/HP/Downloads/dgi_compliance_v5.0.2.bundle"; do [ -f "$B" ] && { BUNDLE="$B"; break; }; done
+[ -n "$BUNDLE" ] || { echo "ERREUR: dgi_compliance_v5.0.2.bundle introuvable"; exit 1; }
 echo "Bundle: $BUNDLE"
 git config --global --add safe.directory "$REPO" 2>/dev/null || true
 cd "$REPO"; git config core.fileMode false
@@ -33,19 +42,18 @@ cd "$REPO"; git config core.fileMode false
 git bundle verify "$BUNDLE" >/dev/null
 git checkout -q main
 git fetch -q "$BUNDLE" "+feature/HL1-compliance-review:feature/HL1-compliance-review"
-git checkout -q feature/HL1-compliance-review
-grep -q '__version__ = "5.0.1"' dgi_compliance/__init__.py && echo "Version 5.0.1 OK"
-git log --oneline -8
-git push -u origin feature/HL1-compliance-review
+git merge --ff-only -q feature/HL1-compliance-review
+grep -q '__version__ = "5.0.2"' dgi_compliance/__init__.py && echo "Version 5.0.2 OK"
+git log --oneline -3
+git push origin main feature/HL1-compliance-review
 EOF2
 ```
 
-Mise en production (après validation sur le site de test) :
+**Option C — GitHub Desktop** : après l'option A ou B sans la dernière commande (`push`), le
+bouton *Push origin* de GitHub Desktop pousse `main`.
 
-```bash
-cd /mnt/c/Users/HP/Documents/GitHub/dgi_compliance && git checkout main && git merge --ff-only feature/HL1-compliance-review \
- && git tag -a v5.0.1 -m "dgi_compliance v5.0.1 (HL1)" && git push origin main v5.0.1
-```
+Étiquette facultative (Frappe Cloud déploie à partir de la branche) :
+`git tag -a v5.0.2 -m "dgi_compliance v5.0.2 (HL1)" && git push origin v5.0.2`
 
 ## 3. Déployer sur Frappe Cloud
 
@@ -75,7 +83,7 @@ bench restart
 |---|---|
 | **Company** | Renseigner **RCCM**, **Id. Nat.**, **Tax ID (NIF)**, **Phone No**, **Email**, logo ; adresse de la société cochée *Is Your Company Address*. |
 | **DGI Compliance Settings** | Vérifier l'**ISF réel** (le gabarit « AAA-BB-NN » doit être remplacé), NIF, jeton. |
-| | Section **Contrôles e-MCF** : Action = *Bloquer* (obligatoire en production), Tolérance = 1 CDF, Casse = *minuscules*, Point de vente par défaut. Il n'y a plus de contrôle de taux de change (v5.0.1). |
+| | Section **Contrôles e-MCF** : Action = *Bloquer* (obligatoire en production), Tolérance = 1 CDF, Casse = *minuscules*, Point de vente par défaut. Il n'y a plus de contrôle de taux de change (v5.0.2). |
 | | **Tolérance écart total ERPNext / e-MCF** : passer de 500 à **5 CDF** (500 était la valeur v4). |
 | | Bouton **DGI > Synchroniser TOUT** : charge les points de vente (code magasin, adresse, NID) et les taux des groupes. Le taux USD publié par l'e-MCF est seulement informatif. |
 | | **Tax Group Mapping** : ajouter les groupes Q (8 %), R, S si utilisés. **Payment Mode Mapping** : chaque mode de paiement utilisé doit être mappé. |
@@ -98,8 +106,9 @@ Les rapports sont accessibles par la recherche : **DGI Rapport Fiscal** → *Gé
    - le montant en lettres est en francs congolais ;
    - le même taux est visible sur le portail DGI.
 4. Avoir RAN sur la facture du point 2.
-5. Rapports X quotidien, Z et A.
-6. Dérouler la campagne `TESTS_v5.0.1.md` (cas DGI 1 à 29, R01 à R03) en mode HT et TTC.
+5. Rapports X quotidien, Z et A : le bouton *Imprimer* utilise directement le format « DGI Rapport
+   Fiscal » (mise en page du rapport e-UF de la DGI, en-tête de la société), sans données JSON.
+6. Dérouler la campagne `TESTS_v5.0.2.md` (cas DGI 1 à 29, R01 à R03) en mode HT et TTC.
 
 ## 6. Tests automatisés (bench de test uniquement)
 

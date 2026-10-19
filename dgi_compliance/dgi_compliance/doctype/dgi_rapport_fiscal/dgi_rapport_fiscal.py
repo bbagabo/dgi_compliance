@@ -7,7 +7,7 @@ import json
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import flt, get_datetime, now_datetime
 
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef import fiscal_reports as fr
@@ -86,6 +86,62 @@ def generate(report_type, company=None, from_datetime=None, to_datetime=None):
     return doc.name
 
 
+def _num(v):
+    """Amount as printed on the DGI e-UF reports: 1.234.567,89 (no currency symbol)."""
+    return f"{flt(v):,.2f}".replace(",", " ").replace(".", ",").replace(" ", ".")
+
+
+def _qty(v):
+    txt = f"{flt(v):,.3f}".rstrip("0").rstrip(".")
+    return txt.replace(",", " ").replace(".", ",").replace(" ", ".")
+
+
+def report_view(doc):
+    """Rows of the printed report, already formatted (layout of the DGI e-UF reports, SFE 1.3.3 / 1.4.2)."""
+    data = doc.get_data()
+    kind = CODES.get(doc.report_type, "X")
+    if kind == "A":
+        articles = data.get("articles") or []
+        summ = data.get("summary") or {}
+        return {"articles": [{
+            "code": a.get("code") or "", "name": a.get("name") or "", "price": _num(a.get("price")),
+            "group": a.get("group") or "", "rate": f"{flt(a.get('rate')):g} %",
+            "qty_sold": _qty(a.get("qty_sold")), "qty_returned": _qty(a.get("qty_returned")),
+            "stock": _qty(a.get("stock")) if a.get("stock") is not None else "n/a",
+            "amount": _num(a.get("amount"))} for a in articles],
+            "total": {"count": summ.get("count", len(articles)), "qty_sold": _qty(summ.get("qty_sold")),
+                      "qty_returned": _qty(summ.get("qty_returned")), "amount": _num(summ.get("amount"))}}
+
+    by_type = data.get("by_type") or {}
+    by_type_group = data.get("by_type_group") or {}
+    empty = {"count": 0, "incomplete": 0, "total": 0, "ht": 0, "vat": 0, "ts": 0}
+    types = []
+    for t in fr.INVOICE_TYPES:
+        s = by_type.get(t) or empty
+        groups_data = by_type_group.get(t) or {}
+        # Groups A..S always listed (as on the DGI report); reserved groups only when used.
+        letters = list(fr.GROUPS) + sorted(g for g, v in groups_data.items()
+                                           if g not in fr.GROUPS and any(flt(x) for x in v.values()))
+        groups = []
+        for g in letters:
+            v = groups_data.get(g) or {}
+            groups.append({"group": g, "total": _num(v.get("total")), "ht": _num(v.get("ht")),
+                           "vat": _num(v.get("vat")), "ts": _num(v.get("ts"))})
+        types.append({"type": t, "count": int(s.get("count") or 0), "incomplete": int(s.get("incomplete") or 0),
+                      "total": _num(s.get("total")), "ht": _num(s.get("ht")), "vat": _num(s.get("vat")),
+                      "ts": _num(s.get("ts")), "groups": groups})
+    red = data.get("reductions") or {}
+    return {
+        "types": types,
+        "payments": [{"label": p.get("label") or p.get("type"), "amount": _num(p.get("net"))}
+                     for p in data.get("payments") or []],
+        "reductions": [{"type": t, "amount": _num((red.get(t) or {}).get("amount")),
+                        "tax": _num((red.get(t) or {}).get("tax"))} for t in fr.INVOICE_TYPES],
+        "natures": [{"code": n.get("code"), "label": n.get("label"), "count": int(n.get("count") or 0),
+                     "total": _num(n.get("total"))} for n in data.get("natures") or []],
+    }
+
+
 def dgi_report_context(doc):
     """Jinja helper for the print format."""
     if isinstance(doc, str):
@@ -94,7 +150,16 @@ def dgi_report_context(doc):
     def _dt(v):
         return get_datetime(v).strftime(fmt) if v else ""
     from dgi_compliance import __version__
-    return {"app_version": __version__, "data": doc.get_data(), "groups": fr.GROUPS, "types": fr.INVOICE_TYPES,
-            "kind": CODES.get(doc.report_type, "X"),
+    kind = CODES.get(doc.report_type, "X")
+    if kind == "Z":
+        title = f"Z rapport #{doc.sequence_no}"
+    elif kind == "A":
+        title = f"A rapport #{doc.sequence_no}"
+    elif doc.report_type == "X périodique":
+        title = "X rapport périodique"
+    else:
+        title = "X rapport quotidien"
+    return {"app_version": __version__, "data": doc.get_data(), "view": report_view(doc), "title": title,
+            "groups": fr.GROUPS, "types": fr.INVOICE_TYPES, "kind": kind,
             "generated_on": _dt(doc.generated_on), "from": _dt(doc.from_datetime), "to": _dt(doc.to_datetime),
             "generated_by": frappe.utils.get_fullname(doc.generated_by) or doc.generated_by}

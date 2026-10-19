@@ -1,4 +1,4 @@
-# Rapport de tests — DGI Compliance v5.0.1 (HL1)
+# Rapport de tests — DGI Compliance v5.0.2 (HL1)
 
 ## 1. Environnement d'exécution
 
@@ -8,7 +8,7 @@
 | Python / MariaDB | 3.14.6 / 10.11 |
 | Site | site de test dédié, société « DGI Test SARL » (CDF, RDC, exercice 2026) |
 | e-MCF | **simulé** (`dgi_compliance/tests/emcf_simulator.py`) : aucun appel réel à la DGI |
-| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) |
+| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) et le 19/10/2026 (v5.0.2) |
 
 Le simulateur reproduit le comportement documenté de l'API e-MCF v1.3 : demandes en attente
 (10 maximum, erreur 63), recalcul des montants par groupe, contrôles de CONFIRM (erreurs 50/51),
@@ -20,7 +20,7 @@ HTTP 401, réponse non JSON, réponse perdue après traitement, montants falsifi
 
 | Suite | Tests | Réussis | Échecs |
 |---|---|---|---|
-| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 51 | 51 | 0 |
+| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 53 | 53 | 0 |
 | `tests.test_calc_words` (unitaires) | 12 | 12 | 0 |
 | `mcf_agent/test_mcf_agent.py` (agent MCF, hors périmètre, non-régression) | 12 | 12 | 0 |
 | Installation sur site neuf (`bench new-site --install-app dgi_compliance`) | 1 | 1 | 0 |
@@ -78,6 +78,13 @@ Cas DGI également automatisés : CT8 (taxe spécifique), CT13 (avoir RRR sans f
 (client AO + groupe D + référence d'exonération), CT15 (exportation), CT29 (hors champ),
 R01–R03 (rapports X, Z, A, numérotation, immuabilité).
 
+v5.0.2 : test R04 (impression des rapports). Il vérifie :
+- le format par défaut du DocType est « DGI Rapport Fiscal » ;
+- aucune donnée JSON n'est imprimée ;
+- toutes les sections exigées par SFE 1.3.3 et 1.4.2 sont présentes ;
+- les groupes A à S sont listés pour chaque type de facture ;
+- les montants sont au format 1.234.567,89.
+
 ## 4. Campagne à exécuter sur l'environnement de test DGI (dossier d'homologation)
 
 À dérouler sur un site de test relié à `https://developper.dgirdc.cd/edef`. Chaque facture est
@@ -100,7 +107,7 @@ il faut deux factures par cas : modèle « TVA incluse » et modèle « TVA en s
 | 26 | Facture en USD (taux saisi sur la facture) | Équivalent CDF sous le Net à payer, taux imprimé = taux saisi = taux affiché par le portail DGI, lettres en francs congolais |
 | 27–28 | Groupes O (1 %) et P | Taux 1 % |
 | 29 | Article coché *Hors champ TVA (DGI)* (groupe A) | Code d'article « HORS CHAMP » |
-| R01–R03 | DGI Rapport Fiscal → X quotidien, Z, A | Tous les éléments du rapport |
+| R01–R03 | DGI Rapport Fiscal → X quotidien, Z, A → *Imprimer* (format par défaut) | Tous les éléments du rapport (SFE 1.3.3 a–m, 1.4.2 a–f), mise en page du rapport e-UF, aucune donnée JSON |
 
 ## 5. Anomalies restantes / points à confirmer avec la DGI
 
