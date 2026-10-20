@@ -715,3 +715,31 @@ class TestV503(HL1Base):
         from dgi_compliance.edef.matrix import resolve_country_scope
         si = fx.make_invoice("Jean Particulier", [("DGI-B-LAIT", 1, 10000)], save=False)
         self.assertEqual(resolve_country_scope(si, with_details=True), ("CD", None, None))
+
+
+class TestV504(unittest.TestCase):
+    """v5.0.4: new customer with an address typed in the quick-entry dialog, then "Edit Full Form"."""
+
+    def _new(self, suffix, **extra):
+        frappe.set_user("Administrator")
+        name = f"CLIENT ADRESSE {suffix} {frappe.generate_hash(length=5)}"
+        doc = frappe.get_doc({"doctype": "Customer", "customer_name": name, "customer_type": "Company",
+                              "customer_group": "Commercial",
+                              "territory": "Congo, The Democratic Republic of the",
+                              "address_line1": "1 rue de Test", "city": "Ville", **extra})
+        doc.insert(ignore_permissions=True)
+        addr = frappe.db.get_value("Customer", doc.name, "customer_primary_address")
+        self.assertTrue(addr)
+        return frappe.db.get_value("Address", addr, "country")
+
+    def test_W01_full_form_keeps_dialog_country(self):
+        # The dialog's Pays field travels as "country_address" when the full form is opened.
+        self.assertEqual(self._new("FF", country_address="France"), "France")
+
+    def test_W02_dialog_save_unchanged(self):
+        self.assertEqual(self._new("QE", country="France"), "France")
+
+    def test_W03_no_country_uses_site_default(self):
+        default = frappe.db.get_single_value("System Settings", "country")
+        self.assertTrue(default)
+        self.assertEqual(self._new("ND"), default)

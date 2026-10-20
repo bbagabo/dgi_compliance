@@ -1,4 +1,4 @@
-# Rapport de tests — DGI Compliance v5.0.3 (HL1)
+# Rapport de tests — DGI Compliance v5.0.4 (HL1)
 
 ## 1. Environnement d'exécution
 
@@ -8,7 +8,7 @@
 | Python / MariaDB | 3.14.6 / 10.11 |
 | Site | site de test dédié, société « DGI Test SARL » (CDF, RDC, exercice 2026) |
 | e-MCF | **simulé** (`dgi_compliance/tests/emcf_simulator.py`) : aucun appel réel à la DGI |
-| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) le 19/10/2026 (v5.0.2) et le 20/10/2026 (v5.0.3) |
+| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) le 19/10/2026 (v5.0.2) et le 20/10/2026 (v5.0.3, v5.0.4) |
 
 Le simulateur reproduit le comportement documenté de l'API e-MCF v1.3 : demandes en attente
 (10 maximum, erreur 63), recalcul des montants par groupe, contrôles de CONFIRM (erreurs 50/51),
@@ -20,7 +20,7 @@ HTTP 401, réponse non JSON, réponse perdue après traitement, montants falsifi
 
 | Suite | Tests | Réussis | Échecs |
 |---|---|---|---|
-| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 60 | 60 | 0 |
+| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 63 | 63 | 0 |
 | `tests.test_calc_words` (unitaires) | 12 | 12 | 0 |
 | `mcf_agent/test_mcf_agent.py` (agent MCF, hors périmètre, non-régression) | 12 | 12 | 0 |
 | Installation sur site neuf (`bench new-site --install-app dgi_compliance`) | 1 | 1 | 0 |
@@ -85,6 +85,14 @@ v5.0.3 : tests V01 à V07.
 | V05 | Facture FV pour ce client | Bloquée, message citant le pays « France » | OK |
 | V06 | Facture à l'exportation pour un client dont l'adresse est en RDC | Bloquée (le pays de la société n'est plus utilisé) | OK |
 | V07 | Client sans adresse | Considéré comme local (CD) | OK |
+
+v5.0.4 : tests W01 à W03 (création d'un client avec adresse).
+
+| ID | Scénario | Résultat attendu | Statut |
+|---|---|---|---|
+| W01 | Adresse et pays saisis dans la fenêtre rapide, puis « Modifier le formulaire complet » et enregistrement | Client et adresse principale créés, pays = celui saisi (France) ; plus d'erreur « Country » | OK |
+| W02 | Enregistrement directement depuis la fenêtre rapide | Inchangé : adresse créée avec le pays saisi | OK |
+| W03 | Adresse sans pays | Adresse créée avec le pays par défaut du site, message d'avertissement | OK |
 
 Cas DGI également automatisés : CT8 (taxe spécifique), CT13 (avoir RRR sans facture), CT14
 (client AO + groupe D + référence d'exonération), CT15 (exportation), CT29 (hors champ),
