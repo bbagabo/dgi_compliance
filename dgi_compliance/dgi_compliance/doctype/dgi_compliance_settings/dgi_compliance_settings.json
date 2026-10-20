@@ -471,13 +471,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "country_code_local",
-   "label": "Code pays local (ISO-2)",
-   "fieldtype": "Data",
-   "default": "CD",
-   "description": "Pays considere comme 'local' pour la Matrice C (RDC = CD)."
-  },
-  {
    "fieldname": "cb_lock",
    "fieldtype": "Column Break"
   },

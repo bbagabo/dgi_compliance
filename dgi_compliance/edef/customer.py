@@ -11,7 +11,7 @@ field: saving fails with "Les champs suivants sont obligatoires pour créer une 
 
 This hook (Customer ``before_insert``) restores the mapping. When no country was typed at all,
 the default country of the site (System Settings, else the default company) is used and the user
-is told to check the address, because the address country drives DGI Matrix C.
+is told to check the address.
 No ERPNext file is modified.
 """
 import frappe
@@ -35,8 +35,8 @@ def map_quick_entry_address_country(doc, method=None):
         country = _default_country()
         if country:
             frappe.msgprint(
-                _("Pays de l'adresse non renseigné : {0} utilisé par défaut. Vérifiez l'adresse du client : "
-                  "son pays détermine la Matrice C (factures FV ou à l'exportation).").format(frappe.bold(country)),
+                _("Pays de l'adresse non renseigné : {0} utilisé par défaut. Vérifiez l'adresse du client.").format(
+                    frappe.bold(country)),
                 indicator="orange", alert=True)
     if country:
         doc.country = country

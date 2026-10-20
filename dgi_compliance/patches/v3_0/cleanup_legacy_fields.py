@@ -7,7 +7,7 @@
        Sales Invoice.dgi_payment_type     (ancien "DGI Payment Type")
        Sales Invoice.custom_dgi_vat_group ("Groupe TVA (LOC/FOR)")
        Company.dgi_isf_number             (ISF desormais uniquement dans Settings)
-3. Rebuild Matrix C without the LOC/FOR (VAT Group) dimension.
+3. Drop the old Matrix C rows (LOC/FOR VAT Group dimension). Matrix C is removed in v5.0.5.
 4. Ensure the default Customer Type mapping (native -> DGI) exists.
 
 Idempotent: safe to run more than once.
@@ -69,16 +69,7 @@ def _rebuild_matrix_c():
     if frappe.db.exists("DGI Validation Matrix", {"matrix_type": OLD_MATRIX_C}):
         frappe.db.delete("DGI Validation Matrix", {"matrix_type": OLD_MATRIX_C})
         frappe.db.commit()
-    # ...and reseed the new Invoice Type x Country grid if none exists yet.
-    from dgi_compliance.edef.seed import MATRIX_C, MATRIX_C_ROWS
-    if not frappe.db.exists("DGI Validation Matrix", {"matrix_type": MATRIX_C}):
-        for it, cs, status in MATRIX_C_ROWS:
-            frappe.get_doc({
-                "doctype": "DGI Validation Matrix", "matrix_type": MATRIX_C,
-                "invoice_type": it, "country_scope": cs,
-                "status": status, "enforcement": "Block", "is_active": 1,
-            }).insert(ignore_permissions=True)
-        frappe.db.commit()
+    # (v5.0.5) Matrix C was removed: no reseed.
 
 
 def _seed_defaults():

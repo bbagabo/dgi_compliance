@@ -3,12 +3,13 @@ from frappe import _
 from frappe.model.document import Document
 
 # Canonical matrix type labels (kept in sync with the Select options in the .json).
-MATRIX_C = "C - Invoice Type / Pays (adresse client)"
-MATRIX_C_OLD = "C - Invoice Type / Country"  # value stored before v5.0.3 (renamed by patch v503)
+# Matrix C (Invoice Type x Country) was removed in v5.0.5 (patch v505 deletes its rows).
+MATRIX_C_REMOVED = ("C - Invoice Type / Pays (adresse client)", "C - Invoice Type / Country",
+                    "C - Invoice Type / VAT Group / Country")
 MATRIX_D = "D - Item Type / Tax Group"
 MATRIX_E = "E - Prepayment / Item Type"
 MATRIX_F = "F - Credit Nature / Item Type"
-MATRIX_TYPES = (MATRIX_C, MATRIX_D, MATRIX_E, MATRIX_F)
+MATRIX_TYPES = (MATRIX_D, MATRIX_E, MATRIX_F)
 
 
 class DGIValidationMatrix(Document):
@@ -20,8 +21,6 @@ class DGIValidationMatrix(Document):
         # Normalise empty dimensions to their wildcard so lookups are predictable.
         if not self.invoice_type:
             self.invoice_type = "Any"
-        if not self.country_scope:
-            self.country_scope = "Any"
         if not self.item_type:
             self.item_type = "All"
         if not self.tax_group:

@@ -12,9 +12,9 @@ Idempotent.
 """
 import frappe
 
-from dgi_compliance.dgi_compliance.doctype.dgi_validation_matrix.dgi_validation_matrix import (
-    MATRIX_C, MATRIX_C_OLD,
-)
+# Matrix C names (the matrix itself is removed in v5.0.5 by patch v505_remove_matrix_c).
+MATRIX_C = "C - Invoice Type / Pays (adresse client)"
+MATRIX_C_OLD = "C - Invoice Type / Country"
 
 LEGACY = "dgi_client_type"
 

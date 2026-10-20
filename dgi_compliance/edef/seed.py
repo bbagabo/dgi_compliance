@@ -200,18 +200,9 @@ def seed_customer_type_mapping(force: bool = False) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Default validation matrices (C-F). Seeded only when the table is empty,
+# Default validation matrices (D-F). Seeded only when the table is empty,
 # so user customisations are never overwritten on migrate.
 # --------------------------------------------------------------------------- #
-
-# Matrix C: (invoice_type, country_scope, status)
-# Local invoices (F*) require a local country (CD); export invoices (E*) require a foreign one.
-MATRIX_C_ROWS = [
-    ("FV", "CD", "Allow"), ("FT", "CD", "Allow"), ("FA", "CD", "Allow"),
-    ("FV", "Non-CD", "Blocked"), ("FT", "Non-CD", "Blocked"), ("FA", "Non-CD", "Blocked"),
-    ("EV", "CD", "Blocked"), ("ET", "CD", "Blocked"), ("EA", "CD", "Blocked"),
-    ("EV", "Non-CD", "Allow"), ("ET", "Non-CD", "Allow"), ("EA", "Non-CD", "Allow"),
-]
 
 # Matrix D baseline: permissive (All/Any -> Allow). Replace with the official DGI grid as needed.
 MATRIX_D_ROWS = [("All", "Any", "Allow")]
@@ -228,8 +219,6 @@ MATRIX_F_ROWS = [
     ("RRR", "BIE", "Allow"), ("RRR", "SER", "Allow"), ("RRR", "TAX", "Allow"),
 ]
 
-MATRIX_C = "C - Invoice Type / Pays (adresse client)"
-MATRIX_C_OLD = "C - Invoice Type / Country"  # value stored before v5.0.3 (renamed by patch v503)
 MATRIX_D = "D - Item Type / Tax Group"
 MATRIX_E = "E - Prepayment / Item Type"
 MATRIX_F = "F - Credit Nature / Item Type"
@@ -239,11 +228,6 @@ def seed_validation_matrix(force: bool = False) -> dict:
     if not force and frappe.db.count("DGI Validation Matrix") > 0:
         return {"skipped": True}
     n = 0
-    for it, cs, status in MATRIX_C_ROWS:
-        frappe.get_doc({"doctype": "DGI Validation Matrix", "matrix_type": MATRIX_C,
-                        "invoice_type": it, "country_scope": cs,
-                        "status": status, "enforcement": "Block", "is_active": 1}).insert(ignore_permissions=True)
-        n += 1
     for itm, tg, status in MATRIX_D_ROWS:
         frappe.get_doc({"doctype": "DGI Validation Matrix", "matrix_type": MATRIX_D,
                         "item_type": itm, "tax_group": tg,

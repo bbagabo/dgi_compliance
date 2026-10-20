@@ -11,3 +11,4 @@ dgi_compliance.patches.v3_5.set_tax_group_priorities
 dgi_compliance.patches.v4_0.add_mcf_agent_role
 dgi_compliance.patches.v5_0.hl1_migrate
 dgi_compliance.patches.v5_0.v503_customer_type_matrix_c
+dgi_compliance.patches.v5_0.v505_remove_matrix_c

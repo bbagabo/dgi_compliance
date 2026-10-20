@@ -519,8 +519,7 @@ class TestNormalisation(HL1Base):
         self.assertEqual(self.request_of(si)["items"][0]["code"], "HORS CHAMP")
 
     def test_CT15_export_invoice(self):
-        si = fx.make_invoice("CLIENT PM SARL", [("DGI-E-CAFE", 3, 20000)], custom_dgi_export=1,
-                             dgi_validation_override=1, submit=True)
+        si = fx.make_invoice("CLIENT PM SARL", [("DGI-E-CAFE", 3, 20000)], custom_dgi_export=1, submit=True)
         si = self.assertNormalized(si)
         self.assertEqual(self.request_of(si)["type"], "EV")
         self.assertEqual(self._ctx(si)["export"], "EXPORTATION")
@@ -659,7 +658,7 @@ def _customer_with_address(name, country, dgi_type="PM", nif="A5556667F", primar
 
 
 class TestV503(HL1Base):
-    """v5.0.3: single customer DGI type field; Matrix C reads the country of the customer's address."""
+    """v5.0.3: single customer DGI type field. v5.0.5: Matrix C (invoice type / country) removed."""
 
     def test_V01_legacy_client_type_removed(self):
         from dgi_compliance.patches.v5_0 import v503_customer_type_matrix_c as patch
@@ -676,45 +675,34 @@ class TestV503(HL1Base):
         self.assertIsNotNone(frappe.get_meta("Customer").get_field("dgi_customer_type"))
         self.assertEqual(frappe.db.get_value("Customer", cust, "dgi_customer_type"), "PM")
 
-    def test_V02_matrix_c_renamed(self):
+    def test_V02_matrix_c_removed(self):
+        """v5.0.5: Matrix C (invoice type / country) no longer exists."""
         from dgi_compliance.dgi_compliance.doctype.dgi_validation_matrix.dgi_validation_matrix import (
-            MATRIX_C, MATRIX_C_OLD)
-        self.assertEqual(MATRIX_C, "C - Invoice Type / Pays (adresse client)")
-        self.assertIn(MATRIX_C, frappe.get_meta("DGI Validation Matrix").get_field("matrix_type").options)
-        self.assertFalse(frappe.db.exists("DGI Validation Matrix", {"matrix_type": MATRIX_C_OLD}))
-        self.assertTrue(frappe.db.exists("DGI Validation Matrix", {"matrix_type": MATRIX_C}))
+            MATRIX_C_REMOVED, MATRIX_TYPES)
+        meta = frappe.get_meta("DGI Validation Matrix")
+        self.assertFalse(any(o.startswith("C -") for o in (meta.get_field("matrix_type").options or "").split("\n")))
+        self.assertIsNone(meta.get_field("country_scope"))
+        self.assertFalse(any(t.startswith("C -") for t in MATRIX_TYPES))
+        self.assertFalse(frappe.db.exists("DGI Validation Matrix", {"matrix_type": ["in", list(MATRIX_C_REMOVED)]}))
+        self.assertTrue(frappe.db.exists("DGI Validation Matrix", {"matrix_type": "E - Prepayment / Item Type"}))
 
-    def test_V03_country_from_customer_primary_address(self):
-        from dgi_compliance.edef.matrix import resolve_country_scope
-        cust = _customer_with_address("CLIENT EXPORT SARL", "France")
-        si = fx.make_invoice(cust, [("DGI-E-CAFE", 1, 20000)], save=False, custom_dgi_export=1)
-        si.customer_address = None
-        scope, country, source = resolve_country_scope(si, with_details=True)
-        self.assertEqual((scope, country), ("Non-CD", "France"))
-        self.assertIn("adresse principale", source)
-
-    def test_V04_export_allowed_for_foreign_address(self):
+    def test_V04_export_invoice_foreign_address(self):
         cust = _customer_with_address("CLIENT EXPORT SARL", "France")
         si = fx.make_invoice(cust, [("DGI-E-CAFE", 1, 20000)], custom_dgi_export=1, submit=True)
         si = self.assertNormalized(si)
         self.assertEqual(self.request_of(si)["type"], "EV")
 
-    def test_V05_fv_blocked_for_foreign_address_with_country_in_message(self):
+    def test_V05_fv_for_foreign_address_no_longer_blocked(self):
         cust = _customer_with_address("CLIENT EXPORT SARL", "France")
-        with self.assertRaises(frappe.ValidationError) as cm:
-            fx.make_invoice(cust, [("DGI-B-LAIT", 1, 10000)])
-        self.assertIn("France", str(cm.exception))
-        self.assertIn("Pays de l'adresse client", str(cm.exception))
+        si = fx.make_invoice(cust, [("DGI-B-LAIT", 1, 10000)], submit=True)
+        si = self.assertNormalized(si)
+        self.assertEqual(self.request_of(si)["type"], "FV")
 
-    def test_V06_export_blocked_for_local_address_not_company_country(self):
+    def test_V06_export_for_local_address_no_longer_blocked(self):
         cust = _customer_with_address("CLIENT LOCAL SARL", "Congo, The Democratic Republic of the")
-        with self.assertRaises(frappe.ValidationError):
-            fx.make_invoice(cust, [("DGI-E-CAFE", 1, 20000)], custom_dgi_export=1)
-
-    def test_V07_no_address_is_local(self):
-        from dgi_compliance.edef.matrix import resolve_country_scope
-        si = fx.make_invoice("Jean Particulier", [("DGI-B-LAIT", 1, 10000)], save=False)
-        self.assertEqual(resolve_country_scope(si, with_details=True), ("CD", None, None))
+        si = fx.make_invoice(cust, [("DGI-E-CAFE", 1, 20000)], custom_dgi_export=1, submit=True)
+        si = self.assertNormalized(si)
+        self.assertEqual(self.request_of(si)["type"], "EV")
 
 
 class TestV504(unittest.TestCase):

@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "Helosystemes"
 app_description = "DGI RDC e-MCF / facture normalisee pour ERPNext v16 (application independante, upgrade-safe)"
-app_version = "5.0.4"
+app_version = "5.0.5"
 app_license = "MIT"
 required_apps = ["erpnext"]
 

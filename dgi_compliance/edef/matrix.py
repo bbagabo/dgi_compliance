@@ -4,7 +4,6 @@ Every rule lives in a user-editable DocType, so nothing here is hard-coded:
 
   * Matrix A  -> DGI Point of Sale     (NID / Token requirement per sales location)
   * Matrix B  -> DGI Customer Type     (mandatory customer-card fields per client type)
-  * Matrix C  -> DGI Validation Matrix (Invoice Type x country of the customer's address)
   * Matrix D  -> DGI Validation Matrix (Item Type x Tax Group)
   * Matrix E  -> DGI Validation Matrix (Prepayment/Invoice Type x Item Type)
   * Matrix F  -> DGI Validation Matrix (Credit Nature x Item Type)
@@ -21,7 +20,7 @@ from frappe.utils import flt
 
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.dgi_compliance.doctype.dgi_validation_matrix.dgi_validation_matrix import (
-    MATRIX_C, MATRIX_D, MATRIX_E, MATRIX_F,
+    MATRIX_D, MATRIX_E, MATRIX_F,
 )
 
 WILDCARDS = {None, "", "Any", "All"}
@@ -44,7 +43,7 @@ def _rows(matrix_type):
             "DGI Validation Matrix",
             filters={"matrix_type": matrix_type, "is_active": 1},
             fields=["name", "status", "enforcement", "priority", "message",
-                    "invoice_type", "country_scope",
+                    "invoice_type",
                     "item_type", "tax_group", "credit_nature"],
         )
     return cache[matrix_type]
@@ -93,59 +92,6 @@ def resolve_invoice_type(doc, settings=None):
         return it
     from dgi_compliance.edef.mapper import _invoice_type
     return _invoice_type(doc, settings)
-
-
-def _country_iso2(country_name):
-    if not country_name:
-        return None
-    code = frappe.db.get_value("Country", country_name, "code")
-    return (code or "").upper() or None
-
-
-def _address_country(name):
-    return frappe.db.get_value("Address", name, "country") if name else None
-
-
-def resolve_customer_country(doc):
-    """(country, source): the "Pays" of the customer's address.
-
-    1. the billing address selected on the invoice (customer_address);
-    2. the customer's primary address (Customer.customer_primary_address);
-    3. another address linked to the customer (primary / billing first).
-    Never the company's own country: no address -> (None, None)."""
-    country = _address_country(doc.get("customer_address"))
-    if country:
-        return country, _("adresse de la facture {0}").format(doc.get("customer_address"))
-    customer = doc.get("customer")
-    if not customer:
-        return None, None
-    primary = frappe.db.get_value("Customer", customer, "customer_primary_address")
-    country = _address_country(primary)
-    if country:
-        return country, _("adresse principale du client {0}").format(primary)
-    rows = frappe.db.sql(
-        """select a.name, a.country from `tabAddress` a
-           join `tabDynamic Link` dl on dl.parent = a.name and dl.parenttype = 'Address'
-           where dl.link_doctype = 'Customer' and dl.link_name = %s and ifnull(a.disabled, 0) = 0
-             and ifnull(a.country, '') != ''
-           order by a.is_primary_address desc, (a.address_type = 'Billing') desc, a.creation asc
-           limit 1""", customer, as_dict=True)
-    if rows:
-        return rows[0].country, _("adresse du client {0}").format(rows[0].name)
-    return None, None
-
-
-def resolve_country_scope(doc, settings=None, with_details=False):
-    """'CD' / 'Non-CD' from the country of the customer's address (Matrix C).
-    A customer without any address is considered local (PP customers often have none)."""
-    settings = settings or get_settings()
-    local = (getattr(settings, "country_code_local", None) or "CD").upper()
-    country, source = resolve_customer_country(doc)
-    iso2 = _country_iso2(country)
-    scope = "CD" if (iso2 is None or iso2 == local) else "Non-CD"
-    if with_details:
-        return scope, country, source
-    return scope
 
 
 def resolve_item_type(item_code):
@@ -454,23 +400,12 @@ def collect_violations(doc, settings=None):
     frappe.flags.pop("_dgi_matrix_cache", None)  # fresh rule snapshot per document
 
     invoice_type = resolve_invoice_type(doc, settings)
-    country_scope, country_name, country_source = resolve_country_scope(doc, settings, with_details=True)
     credit_nature = resolve_credit_nature(doc)
 
     violations = []
 
     # Invoice-type context coherence (FV/EV/FT/ET/FA/EA)
     violations.extend(evaluate_invoice_type_context(doc, settings))
-
-    # Matrix C - header level (Invoice Type x Country)
-    v = _decide(MATRIX_C,
-                {"invoice_type": invoice_type, "country_scope": country_scope},
-                _("Matrice C (Type de facture / Pays de l'adresse client)"))
-    if v:
-        where = (_("pays de l'adresse client : {0} ({1}), {2}").format(country_name, country_scope, country_source)
-                 if country_name else _("client sans adresse : pays local ({0}) suppose").format(country_scope))
-        v["message"] = f"{v['message']} – {where}"
-        violations.append(v)
 
     # Matrices D, E, F - per line
     for it in (doc.get("items") or []):
