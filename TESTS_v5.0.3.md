@@ -1,4 +1,4 @@
-# Rapport de tests — DGI Compliance v5.0.2 (HL1)
+# Rapport de tests — DGI Compliance v5.0.3 (HL1)
 
 ## 1. Environnement d'exécution
 
@@ -8,7 +8,7 @@
 | Python / MariaDB | 3.14.6 / 10.11 |
 | Site | site de test dédié, société « DGI Test SARL » (CDF, RDC, exercice 2026) |
 | e-MCF | **simulé** (`dgi_compliance/tests/emcf_simulator.py`) : aucun appel réel à la DGI |
-| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) et le 19/10/2026 (v5.0.2) |
+| Date | 17/10/2026 (v5.0.0), campagne complète rejouée le 18/10/2026 (v5.0.1) le 19/10/2026 (v5.0.2) et le 20/10/2026 (v5.0.3) |
 
 Le simulateur reproduit le comportement documenté de l'API e-MCF v1.3 : demandes en attente
 (10 maximum, erreur 63), recalcul des montants par groupe, contrôles de CONFIRM (erreurs 50/51),
@@ -20,7 +20,7 @@ HTTP 401, réponse non JSON, réponse perdue après traitement, montants falsifi
 
 | Suite | Tests | Réussis | Échecs |
 |---|---|---|---|
-| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 53 | 53 | 0 |
+| `tests.test_hl1_emcf` (intégration Frappe/ERPNext) | 60 | 60 | 0 |
 | `tests.test_calc_words` (unitaires) | 12 | 12 | 0 |
 | `mcf_agent/test_mcf_agent.py` (agent MCF, hors périmètre, non-régression) | 12 | 12 | 0 |
 | Installation sur site neuf (`bench new-site --install-app dgi_compliance`) | 1 | 1 | 0 |
@@ -74,6 +74,18 @@ entrée du journal *DGI Exchange Log*, capture du portail de vérification DGI (
 ⁽¹⁾ L'API e-MCF n'utilise pas de certificat client : l'authentification repose sur le jeton JWT.
 Le scénario « certificat expiré ou incorrect » est donc couvert par T18 et T19.
 
+v5.0.3 : tests V01 à V07.
+
+| ID | Scénario | Résultat attendu | Statut |
+|---|---|---|---|
+| V01 | Ancien champ client `dgi_client_type` (v1) présent avec la valeur PM | Champ supprimé, valeur reprise dans `dgi_customer_type` | OK |
+| V02 | Matrice C renommée | « C - Invoice Type / Pays (adresse client) », plus aucune ligne avec l'ancien nom | OK |
+| V03 | Client avec adresse principale en France, aucune adresse choisie sur la facture | Pays lu = France, Non-CD | OK |
+| V04 | Facture à l'exportation pour ce client | EV normalisée | OK |
+| V05 | Facture FV pour ce client | Bloquée, message citant le pays « France » | OK |
+| V06 | Facture à l'exportation pour un client dont l'adresse est en RDC | Bloquée (le pays de la société n'est plus utilisé) | OK |
+| V07 | Client sans adresse | Considéré comme local (CD) | OK |
+
 Cas DGI également automatisés : CT8 (taxe spécifique), CT13 (avoir RRR sans facture), CT14
 (client AO + groupe D + référence d'exonération), CT15 (exportation), CT29 (hors champ),
 R01–R03 (rapports X, Z, A, numérotation, immuabilité).
@@ -100,7 +112,7 @@ il faut deux factures par cas : modèle « TVA incluse » et modèle « TVA en s
 | 10–12 | Retour sur la facture du cas 1 (RAN), 3 (RAM), 6 (COR) | Référence = Code DEF d'origine ; nature imprimée |
 | 13 | Avoir sans « Retour contre », nature RRR | Référence « RRR » |
 | 14 | Client AO, articles groupe D, Commentaire A = référence d'exonération | « Réf. Exo. » imprimé |
-| 15–17 | « Facture à l'exportation » cochée, groupe E (EV, EA sur 15, ET) | Mention EXPORTATION |
+| 15–17 | Client dont l'adresse est hors RDC, « Facture à l'exportation » cochée, groupe E (EV, EA sur 15, ET) | Mention EXPORTATION ; Matrice C : pays de l'adresse du client |
 | 18 | Groupes F et G | Taux 16 % et 5 % |
 | 19–24 | Groupes H, I, J, K, L, M + N (articles TAX pour L et N) | Groupes et types d'article |
 | 25 | Remise 10 % (B), remise de 300 CDF (A) | originalPrice, « Remise » |

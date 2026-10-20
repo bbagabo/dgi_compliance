@@ -1,6 +1,6 @@
 [project]
 name = "dgi_compliance"
-version = "5.0.2"
+version = "5.0.3"
 description = "DGI RDC e-MCF/e-DEF fiscal compliance for ERPNext v16 (upgrade-safe custom app)"
 authors = [{ name = "DGI Compliance" }]
 requires-python = ">=3.10"

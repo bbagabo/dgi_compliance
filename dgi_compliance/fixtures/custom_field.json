@@ -370,7 +370,7 @@
   "fieldtype": "Link",
   "options": "DGI Customer Type",
   "insert_after": "tax_id",
-  "description": "PP/PM/PC/PL/AO. Si vide, deduit du Customer Type natif via le mapping (DGI Settings). Determine les champs obligatoires (Matrice B)."
+  "description": "Type de client DGI (PP, PM, PC, PL, AO) : liste synchronisee depuis l'e-MCF (DGI Compliance Settings > Synchroniser). Si vide, deduit du Customer Type natif via le mapping (Matrice G). Determine les champs obligatoires (Matrice B)."
  },
  {
   "doctype": "Custom Field",

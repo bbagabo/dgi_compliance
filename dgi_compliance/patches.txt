@@ -10,3 +10,4 @@ dgi_compliance.patches.v3_2.seed_currency_rules
 dgi_compliance.patches.v3_5.set_tax_group_priorities
 dgi_compliance.patches.v4_0.add_mcf_agent_role
 dgi_compliance.patches.v5_0.hl1_migrate
+dgi_compliance.patches.v5_0.v503_customer_type_matrix_c

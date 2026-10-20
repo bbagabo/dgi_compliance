@@ -3,7 +3,8 @@ from frappe import _
 from frappe.model.document import Document
 
 # Canonical matrix type labels (kept in sync with the Select options in the .json).
-MATRIX_C = "C - Invoice Type / Country"
+MATRIX_C = "C - Invoice Type / Pays (adresse client)"
+MATRIX_C_OLD = "C - Invoice Type / Country"  # value stored before v5.0.3 (renamed by patch v503)
 MATRIX_D = "D - Item Type / Tax Group"
 MATRIX_E = "E - Prepayment / Item Type"
 MATRIX_F = "F - Credit Nature / Item Type"
