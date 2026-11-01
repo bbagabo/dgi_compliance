@@ -17,6 +17,22 @@
    "in_list_view": 1
   },
   {
+   "fieldname": "company",
+   "label": "Societe",
+   "fieldtype": "Link",
+   "options": "Company",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Societe (NIF) qui emet les factures de ce point de vente. Obligatoire des qu'il y a plusieurs societes."
+  },
+  {
+   "fieldname": "branch",
+   "label": "Branche / site",
+   "fieldtype": "Link",
+   "options": "Branch",
+   "description": "Une agence ne designe qu'un point de vente actif par societe."
+  },
+  {
    "fieldname": "nim",
    "label": "NIM (e-MCF)",
    "fieldtype": "Link",
@@ -44,15 +60,35 @@
   },
   {
    "fieldname": "nid",
-   "label": "NID",
+   "label": "Identifiant imprime declare (Matrice A)",
    "fieldtype": "Data",
-   "description": "Numero d'identification du point de vente."
+   "description": "Champ herite de la Matrice A. Il ne sert pas au routage : le NIM est dans 'NIM (e-MCF)', le NID du MCF dans 'MCF rattache'."
   },
   {
    "fieldname": "token",
    "label": "Token e-DEF (override)",
    "fieldtype": "Password",
-   "description": "Optionnel: jeton specifique a ce point de vente. Si vide, le jeton global des Settings est utilise."
+   "description": "Jeton JWT de l'e-MCF de ce point de vente (un jeton = un e-MCF). Prioritaire sur le jeton global depuis HL2."
+  },
+  {
+   "fieldname": "token_check",
+   "fieldtype": "Select",
+   "label": "Controle du jeton",
+   "options": "\nNon verifie\nOK\nDifferent\nErreur",
+   "read_only": 1,
+   "description": "Resultat de 'Tester le jeton e-MCF' : le NIM renvoye par la DGI pour ce jeton doit etre celui du point de vente."
+  },
+  {
+   "fieldname": "token_nim",
+   "fieldtype": "Data",
+   "label": "NIM renvoye pour ce jeton",
+   "read_only": 1
+  },
+  {
+   "fieldname": "token_checked_on",
+   "fieldtype": "Datetime",
+   "label": "Jeton controle le",
+   "read_only": 1
   },
   {
    "fieldname": "nid_requirement",
@@ -68,6 +104,85 @@
    "fieldtype": "Select",
    "options": "Optional\nMandatory",
    "default": "Mandatory"
+  },
+  {
+   "fieldname": "sb_channel",
+   "label": "Canal de normalisation (HL2)",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "primary_channel",
+   "label": "Canal prioritaire (derogation)",
+   "fieldtype": "Select",
+   "options": "\ne-MCF\nMCF",
+   "description": "Vide : canal prioritaire de DGI Compliance Settings. Renseigne : derogation pour ce point de vente (DGI Fiscal Manager ou System Manager, motif obligatoire)."
+  },
+  {
+   "fieldname": "priority_reason",
+   "fieldtype": "Small Text",
+   "label": "Motif de la derogation",
+   "depends_on": "primary_channel",
+   "mandatory_depends_on": "primary_channel"
+  },
+  {
+   "fieldname": "active_channel",
+   "label": "Canal en vigueur",
+   "fieldtype": "Select",
+   "options": "\ne-MCF\nMCF",
+   "read_only": 1,
+   "bold": 1,
+   "in_list_view": 1,
+   "description": "Calcule : canal prioritaire, ou canal impose par une bascule manuelle en vigueur. Le secours automatique, s'il est ouvert, est indique a part."
+  },
+  {
+   "fieldname": "forced_switch",
+   "fieldtype": "Link",
+   "label": "Bascule manuelle en vigueur",
+   "options": "DGI Channel Switch",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mcf_device",
+   "label": "MCF rattache (NID)",
+   "fieldtype": "Link",
+   "options": "DGI MCF Device"
+  },
+  {
+   "fieldname": "fallback_policy",
+   "fieldtype": "Select",
+   "label": "Secours automatique sur l'autre canal",
+   "options": "Automatique\nManuelle\nAucune",
+   "default": "Automatique",
+   "description": "Automatique : l'autre canal prend le relais seulement quand le canal prioritaire n'a certainement pas recu la facture, dans les deux sens. Manuelle : les factures attendent, alerte. Aucune : jamais l'autre canal."
+  },
+  {
+   "fieldname": "cb_channel",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "switch_allowed",
+   "label": "Bascule manuelle autorisee",
+   "fieldtype": "Check",
+   "default": "1",
+   "description": "A cocher seulement apres confirmation ecrite de la DGI (cohabitation e-MCF / MCF pour ce point de vente)."
+  },
+  {
+   "fieldname": "dgi_switch_reference",
+   "label": "Reference de l'accord DGI",
+   "fieldtype": "Data",
+   "depends_on": "switch_allowed"
+  },
+  {
+   "fieldname": "fallback_since",
+   "fieldtype": "Datetime",
+   "label": "Secours MCF actif depuis",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fallback_reason",
+   "fieldtype": "Small Text",
+   "label": "Cause du secours",
+   "read_only": 1
   },
   {
    "fieldname": "sb_addr",
@@ -164,6 +279,16 @@
   },
   {
    "role": "Accounts User",
+   "read": 1
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "DGI Caisse MCF",
    "read": 1
   }
  ]

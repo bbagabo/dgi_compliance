@@ -48,9 +48,12 @@ class TaxGroupMappingError(frappe.ValidationError):
 # --------------------------------------------------------------------------- #
 
 def _seller_nif(doc, settings):
-    if settings.default_nif:
+    """HL2 (V2): with several companies, each invoice is declared under the NIF of ITS company;
+    the 'Seller NIF (default)' of the settings only applies to a single-company site."""
+    company_nif = (frappe.db.get_value("Company", doc.company, "tax_id") or "").strip() if doc.get("company") else ""
+    if settings.default_nif and frappe.db.count("Company") <= 1:
         return settings.default_nif.strip()
-    return (frappe.db.get_value("Company", doc.company, "tax_id") or "").strip() or None
+    return company_nif or None
 
 
 def _seller_isf(doc, settings):

@@ -80,6 +80,8 @@ def company_block(doc, settings):
 
 def _point_of_sale_name(doc, settings):
     nim = doc.get("custom_dgi_nim")
+    if doc.get("dgi_point_of_sale") and frappe.db.exists("DGI Point of Sale", doc.dgi_point_of_sale):
+        return doc.dgi_point_of_sale, (nim if doc.get("custom_dgi_channel") != "MCF" else None)
     if nim:
         pos = frappe.db.get_value("DGI Point of Sale", {"nim": nim}, "name")
         if pos:
@@ -108,7 +110,9 @@ def pos_block(doc, settings):
         "address": address or "",
         "city": (pos.get("pos_city") if pos else None) or (emcf.address3 if emcf else "") or "",
         "phone": (pos.get("pos_phone") if pos else None) or (emcf.contact1 if emcf else "") or "",
-        "nid": (pos.nid if pos and pos.nid else None) or emcf_nim or "",
+        # MCF channel (HL2): the MID returned by the device (NID-ACNT) is the printed DEF NIM
+        "nid": (doc.get("custom_dgi_nim") if doc.get("custom_dgi_channel") == "MCF" else None)
+               or (pos.nid if pos and pos.nid else None) or emcf_nim or "",
         "terminal": (pos.get("pos_terminal") if pos else None) or doc.get("pos_profile") or "",
         "found": bool(pos or emcf),
     }

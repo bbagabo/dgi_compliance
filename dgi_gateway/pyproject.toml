@@ -1,0 +1,21 @@
+[project]
+name = "dgi-gateway"
+version = "0.2.0"
+description = "Passerelle fiscale de site : MCF physique (protocole MCF-SFE v1.0, DGI RDC) <-> ERPNext dgi_compliance"
+authors = [{ name = "DGI Compliance" }]
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = ["cryptography>=41", "pyserial>=3.5"]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.scripts]
+dgi-gateway = "dgi_gateway.cli:main"
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.module]
+name = "dgi_gateway"

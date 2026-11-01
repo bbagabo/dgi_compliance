@@ -15,13 +15,24 @@
   },
   {
    "fieldname": "communication_mode",
-   "label": "Mode de communication DGI",
+   "label": "Ancien mode de communication (v4 / v5.2, remplace par le canal prioritaire)",
    "fieldtype": "Select",
    "options": "E-MCF (API)\nMCF Physique (USB)",
    "default": "E-MCF (API)",
-   "reqd": 1,
+   "reqd": 0,
    "bold": 1,
-   "description": "EXCLUSIF: un seul canal actif a la fois. 'E-MCF (API)' = normalisation via l'API e-DEF (webhooks/HTTP). 'MCF Physique (USB)' = normalisation via le dispositif fiscal branche en USB (agent MCF local); dans ce mode, TOUTE communication API vers la DGI est bloquee."
+   "description": "Depuis HL2 (v5.1) le canal est porte par chaque point de vente fiscal (champ 'Canal actif' de DGI Point of Sale) et ne se change que par un document DGI Channel Switch. Cette valeur sert de canal par defaut pour un point de vente sans canal et pour un site sans point de vente.",
+   "hidden": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "primary_channel",
+   "fieldtype": "Select",
+   "label": "Canal prioritaire",
+   "options": "e-MCF\nMCF",
+   "default": "e-MCF",
+   "bold": 1,
+   "description": "Canal utilise en priorite par tous les points de vente. L'autre canal sert de secours automatique, seulement quand le canal prioritaire n'a certainement pas recu la facture. Un point de vente peut deroger a ce reglage (DGI Point of Sale)."
   },
   {
    "fieldname": "environment",
@@ -29,29 +40,25 @@
    "fieldtype": "Select",
    "options": "Test\nProduction",
    "default": "Test",
-   "reqd": 1,
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "reqd": 1
   },
   {
    "fieldname": "base_url_test",
    "label": "Base URL (Test)",
    "fieldtype": "Data",
-   "default": "https://developper.dgirdc.cd/edef",
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "default": "https://developper.dgirdc.cd/edef"
   },
   {
    "fieldname": "base_url_production",
    "label": "Base URL (Production)",
    "fieldtype": "Data",
-   "default": "https://edef.dgirdc.cd",
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "default": "https://edef.dgirdc.cd"
   },
   {
    "fieldname": "token",
    "label": "e-DEF JWT Token",
    "fieldtype": "Password",
-   "description": "Issued by the e-MCF management portal.",
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "description": "Issued by the e-MCF management portal."
   },
   {
    "fieldname": "auth_scheme",
@@ -59,15 +66,13 @@
    "fieldtype": "Select",
    "options": "Bearer\nNone",
    "default": "Bearer",
-   "description": "Bearer => 'Authorization: Bearer <token>'. None => raw token.",
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "description": "Bearer => 'Authorization: Bearer <token>'. None => raw token."
   },
   {
    "fieldname": "request_timeout",
    "label": "Request Timeout (s)",
    "fieldtype": "Int",
-   "default": "15",
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "default": "15"
   },
   {
    "fieldname": "cb_1",
@@ -113,8 +118,7 @@
    "fieldname": "token_valid_until",
    "label": "Token Valid Until",
    "fieldtype": "Datetime",
-   "read_only": 1,
-   "depends_on": "eval:doc.communication_mode!='MCF Physique (USB)'"
+   "read_only": 1
   },
   {
    "fieldname": "sb_hl1",
@@ -157,48 +161,176 @@
    "description": "Imprime sur la facture lorsque ni le NIM renvoye par l'e-MCF ni le POS Profile ne designent un point de vente."
   },
   {
+   "fieldname": "use_warehouse_mapping",
+   "fieldtype": "Check",
+   "label": "Utiliser les entrepots pour trouver le point de vente",
+   "default": "0",
+   "description": "Les entrepots rattaches a un point de vente (champ 'Point de vente fiscal DGI' de l'entrepot) deviennent une source. Ils ne decident que si la facture n'a ni point de vente saisi, ni POS Profile, ni agence rattaches."
+  },
+  {
+   "fieldname": "warehouse_mismatch_action",
+   "fieldtype": "Select",
+   "label": "Entrepot d'un autre point de vente (facturation centralisee)",
+   "options": "Signaler\nBloquer",
+   "default": "Signaler",
+   "depends_on": "use_warehouse_mapping",
+   "description": "Signaler : la facture garde le point de vente du lieu d'emission, l'ecart est trace dans la decision de routage. Bloquer : un responsable doit arbitrer."
+  },
+  {
    "fieldname": "sb_mcf",
    "fieldtype": "Section Break",
-   "label": "MCF Physique (USB)",
-   "depends_on": "eval:doc.communication_mode=='MCF Physique (USB)'"
+   "label": "Canal MCF physique (HL2)"
   },
   {
    "fieldname": "mcf_port",
    "label": "Port COM (optionnel)",
    "fieldtype": "Data",
-   "description": "Indice de port serie transmis a l'agent local (ex: COM3). Vide = l'agent detecte automatiquement le port USB du MCF (sondage C1h)."
+   "description": "Obsolete depuis v5.1 (agent v4 remplace par les passerelles DGI Gateway).",
+   "hidden": 1
   },
   {
    "fieldname": "mcf_job_stale_minutes",
    "label": "Job bloque apres (minutes)",
    "fieldtype": "Int",
    "default": "10",
-   "description": "Un job 'In Progress' plus vieux que ce delai est remis en file (agent plante/debranche)."
+   "description": "Obsolete depuis v5.1 (agent v4 remplace par les passerelles DGI Gateway).",
+   "hidden": 1
   },
   {
    "fieldname": "mcf_totals_tolerance",
    "label": "Tolerance totaux machine (CDF)",
    "fieldtype": "Float",
    "default": "1.0",
-   "description": "Ecart maximal tolere entre les totaux calcules (payload) et les totaux enregistres par le MCF (commande 33h) avant abandon du job."
+   "description": "Ecart maximal tolere entre les totaux du SFE et ceux enregistres par le MCF (33h). Au-dela, la facture est annulee sur le MCF et n'est pas normalisee."
+  },
+  {
+   "fieldname": "mcf_credit_policy",
+   "label": "Paiement a credit sur MCF",
+   "fieldtype": "Select",
+   "options": "Declarer avec la lettre credit du MCF\nDeclarer en A (autre)\nBloquer",
+   "default": "Declarer avec la lettre credit du MCF",
+   "description": "Les ventes a credit se declarent sur le MCF comme sur l'e-MCF (DGI). Le protocole v1.0 ne documente pas la lettre : renseignez celle du MCF mis a jour ci-dessous."
+  },
+  {
+   "fieldname": "mcf_credit_letter",
+   "fieldtype": "Data",
+   "label": "Lettre du paiement a credit (commande 35h)",
+   "length": 1,
+   "depends_on": "eval:doc.mcf_credit_policy=='Declarer avec la lettre credit du MCF'",
+   "description": "Une lettre (A-Z) communiquee par le fournisseur du MCF apres la mise a jour."
+  },
+  {
+   "fieldname": "mcf_lease_seconds",
+   "label": "Duree du bail d'une operation (s)",
+   "fieldtype": "Int",
+   "default": "180",
+   "description": "Sans resultat dans ce delai, l'operation devient 'Incertaine' et sera rapprochee par C1h (jamais remise en file)."
+  },
+  {
+   "fieldname": "mcf_max_attempts",
+   "label": "Tentatives maximum par facture",
+   "fieldtype": "Int",
+   "default": "3"
+  },
+  {
+   "fieldname": "mcf_pending_timeout_s",
+   "label": "Attente maximale d'une reponse P: (38h, s)",
+   "fieldtype": "Int",
+   "default": "90"
+  },
+  {
+   "fieldname": "cb_mcf_hl2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gateway_poll_interval_s",
+   "label": "Intervalle d'interrogation des passerelles (s)",
+   "fieldtype": "Float",
+   "default": "2"
+  },
+  {
+   "fieldname": "gateway_offline_minutes",
+   "label": "Alerte passerelle muette apres (min)",
+   "fieldtype": "Int",
+   "default": "2"
+  },
+  {
+   "fieldname": "mcf_sync_warning_days",
+   "label": "Alerte synchro MCF-DGI apres (jours)",
+   "fieldtype": "Int",
+   "default": "1",
+   "description": "Protocole C2h : alerter si la derniere connexion du MCF a la DGI depasse 1 jour."
+  },
+  {
+   "fieldname": "mcf_sync_critical_days",
+   "label": "Alerte critique synchro MCF-DGI apres (jours)",
+   "fieldtype": "Int",
+   "default": "7",
+   "description": "Exigence SFE 6.1 : information quotidienne au-dela de 7 jours."
+  },
+  {
+   "fieldname": "switch_requires_two_people",
+   "label": "Bascule de canal : deux personnes",
+   "fieldtype": "Check",
+   "default": "1",
+   "description": "La bascule doit etre validee par un autre utilisateur que celui qui l'a demandee."
+  },
+  {
+   "fieldname": "switch_requires_dgi_reference",
+   "fieldtype": "Check",
+   "label": "Bascule manuelle : reference DGI obligatoire",
+   "default": "0",
+   "description": "Decoche : la DGI admet la cohabitation e-MCF / MCF sur un point de vente (H1, H2)."
+  },
+  {
+   "fieldname": "emcf_retry_minutes",
+   "fieldtype": "Int",
+   "label": "Secours : nouvel essai du canal prioritaire apres (min)",
+   "default": "5",
+   "description": "Pendant ce delai apres une panne e-MCF prouvee, les factures vont directement au MCF de secours ; ensuite l'e-MCF est reessaye (et teste chaque minute en arriere-plan)."
+  },
+  {
+   "fieldname": "mcf_fallback_after_s",
+   "fieldtype": "Int",
+   "label": "Secours e-MCF : delai avant d'envoyer a l'e-MCF une facture restee en file au MCF (s)",
+   "default": "60",
+   "description": "Seulement quand le MCF est le canal prioritaire et que la politique de secours du point de vente est Automatique. Une facture deja prise par le poste ne change jamais de canal."
+  },
+  {
+   "fieldname": "station_poll_interval_s",
+   "fieldtype": "Float",
+   "label": "Poste MCF (navigateur) : interrogation de secours (s)",
+   "default": "15",
+   "description": "Le poste est reveille instantanement par notification ; cette interrogation ne sert qu'en secours."
+  },
+  {
+   "fieldname": "station_approval_two_people",
+   "fieldtype": "Check",
+   "label": "Poste MCF : approbation par une autre personne que celle qui l'a enrole",
+   "default": "1"
   },
   {
    "fieldname": "cb_mcf",
-   "fieldtype": "Column Break"
+   "fieldtype": "Column Break",
+   "hidden": 1
   },
   {
    "fieldname": "mcf_agent_last_seen",
    "label": "Agent: dernier signe de vie",
    "fieldtype": "Datetime",
    "read_only": 1,
-   "no_copy": 1
+   "no_copy": 1,
+   "hidden": 1,
+   "description": "Obsolete depuis v5.1 (agent v4 remplace par les passerelles DGI Gateway)."
   },
   {
    "fieldname": "mcf_agent_status",
    "label": "Agent: dernier etat (C1h/C2h)",
    "fieldtype": "Small Text",
    "read_only": 1,
-   "no_copy": 1
+   "no_copy": 1,
+   "hidden": 1,
+   "description": "Obsolete depuis v5.1 (agent v4 remplace par les passerelles DGI Gateway)."
   },
   {
    "fieldname": "sb_cur",

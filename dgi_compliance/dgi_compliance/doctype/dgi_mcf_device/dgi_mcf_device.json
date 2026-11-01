@@ -1,0 +1,289 @@
+{
+ "doctype": "DocType",
+ "name": "DGI MCF Device",
+ "module": "DGI Compliance",
+ "custom": 0,
+ "engine": "InnoDB",
+ "autoname": "field:nid",
+ "title_field": "nid",
+ "track_changes": 1,
+ "description": "MCF physique (dispositif electronique fiscal) : identifie par son NID (numero de serie). Rattache a un seul point de vente fiscal.",
+ "fields": [
+  {
+   "fieldname": "nid",
+   "fieldtype": "Data",
+   "label": "NID (numero de serie du MCF)",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Partie NID du MID (NID-ACNT) lu par la commande C1h."
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Detecte\nDeclare\nActif\nA revalider\nSuspendu\nRetire",
+   "default": "Declare",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Seul un MCF Actif recoit des factures. Detecte : propose depuis un Poste MCF. Declare : saisi a la main. Actif : valide par un responsable. A revalider : MID ou NIF lu different de la validation."
+  },
+  {
+   "fieldname": "point_of_sale",
+   "fieldtype": "Link",
+   "label": "Point de vente fiscal",
+   "options": "DGI Point of Sale",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Societe",
+   "options": "Company",
+   "fetch_from": "point_of_sale.company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "manufacturer",
+   "fieldtype": "Data",
+   "label": "Fabricant",
+   "default": "ELTRADE"
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Modele",
+   "default": "CC300"
+  },
+  {
+   "fieldname": "firmware",
+   "fieldtype": "Data",
+   "label": "Version logicielle"
+  },
+  {
+   "fieldname": "nif",
+   "fieldtype": "Data",
+   "label": "NIF lu dans le MCF",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_state",
+   "fieldtype": "Section Break",
+   "label": "Etat (dernier heartbeat)",
+   "collapsible": 0
+  },
+  {
+   "fieldname": "last_mid",
+   "fieldtype": "Data",
+   "label": "MID (NID-ACNT)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_status_on",
+   "fieldtype": "Datetime",
+   "label": "Etat recu le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_flags",
+   "fieldtype": "Small Text",
+   "label": "Drapeaux d'etat",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_tc",
+   "fieldtype": "Int",
+   "label": "Dernier compteur total (TC)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tax_rates",
+   "fieldtype": "Code",
+   "label": "Groupes et taux annonces par le MCF (C1h)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_invoice",
+   "fieldtype": "Data",
+   "label": "Derniere facture du MCF (C1h)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "dgi_last_sync",
+   "fieldtype": "Datetime",
+   "label": "Derniere connexion du MCF a la DGI (C2h)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dgi_pending",
+   "fieldtype": "Int",
+   "label": "Transactions en attente d'envoi a la DGI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sync_alert",
+   "fieldtype": "Select",
+   "label": "Alerte de synchronisation",
+   "options": "OK\nAlerte\nCritique",
+   "default": "OK",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sb_raw",
+   "fieldtype": "Section Break",
+   "label": "Detail",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "last_status",
+   "fieldtype": "Code",
+   "label": "Dernier etat recu",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "sb_registration",
+   "fieldtype": "Section Break",
+   "label": "Decouverte et validation",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "taxpayer_name",
+   "fieldtype": "Data",
+   "label": "Raison sociale lue (2Bh)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "taxpayer_address",
+   "fieldtype": "Small Text",
+   "label": "Adresse lue (2Bh)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "observed_on",
+   "fieldtype": "Datetime",
+   "label": "Valeurs lues le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discovered_by",
+   "fieldtype": "Link",
+   "label": "Propose par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discovered_on",
+   "fieldtype": "Datetime",
+   "label": "Propose le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "discovered_gateway",
+   "fieldtype": "Link",
+   "label": "Propose depuis le poste",
+   "options": "DGI Gateway",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_registration",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "validated_by",
+   "fieldtype": "Link",
+   "label": "Valide par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "validated_on",
+   "fieldtype": "Datetime",
+   "label": "Valide le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "validated_mid",
+   "fieldtype": "Data",
+   "label": "MID valide",
+   "read_only": 1,
+   "description": "MID (NID-ACNT) accepte a la validation. Un MID lu different fait passer le MCF a 'A revalider'."
+  },
+  {
+   "fieldname": "nif_check",
+   "fieldtype": "Select",
+   "label": "Controle du NIF",
+   "options": "\nConcordant\nDifferent",
+   "read_only": 1
+  },
+  {
+   "fieldname": "accepted_differences",
+   "fieldtype": "Small Text",
+   "label": "Ecarts acceptes a la validation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_connectivity_test",
+   "fieldtype": "Datetime",
+   "label": "Dernier test de connexion",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_connectivity_result",
+   "fieldtype": "Small Text",
+   "label": "Resultat du test de connexion",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Caisse MCF",
+   "read": 1
+  }
+ ]
+}

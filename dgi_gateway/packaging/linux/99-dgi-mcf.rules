@@ -1,0 +1,15 @@
+# /etc/udev/rules.d/99-dgi-mcf.rules - nom stable /dev/dgi-mcf pour le MCF du site
+#
+# Les identifiants USB du MCF ne sont pas publies par la DGI : relevez-les sur le poste avec
+#   udevadm info -a -n /dev/ttyACM0 | grep -E 'idVendor|idProduct|serial' | head
+# puis remplacez XXXX / YYYY (et le numero de serie si le site a plusieurs boitiers identiques).
+# Ensuite : sudo udevadm control --reload && sudo udevadm trigger
+# et dans /etc/dgi-gateway/gateway.json : "serial_port": "/dev/dgi-mcf"
+#
+# Le nom stable evite qu'un autre peripherique serie (lecteur, imprimante) prenne la place du MCF
+# apres un redemarrage. La passerelle verifie de toute facon le NID annonce par le boitier (C1h)
+# et refuse de travailler avec un MCF qui n'est pas celui enregistre dans ERPNext.
+
+SUBSYSTEM=="tty", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", SYMLINK+="dgi-mcf", GROUP="dgi-gateway", MODE="0660"
+# avec numero de serie :
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", ATTRS{serial}=="NUMERO", SYMLINK+="dgi-mcf", GROUP="dgi-gateway", MODE="0660"

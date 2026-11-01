@@ -53,7 +53,8 @@ frappe.ui.form.on("Sales Invoice", {
                     callback: (r) => {
                         const res = r.message || {};
                         if (res.ok && res.stage === "queued-mcf") {
-                            frappe.show_alert({ message: __("Envoye a l'agent MCF local (job {0})", [res.job || "?"]), indicator: "blue" });
+                            frappe.show_alert({ message: __("Transmise au MCF (operation {0}, position {1}) : la facture se mettra a jour des reception du code DEF/DGI.",
+                                [res.operation || res.job || "?", res.position || 1]), indicator: "blue" }, 8);
                         } else if (res.ok) {
                             frappe.show_alert({ message: __("Facture normalisee: {0}", [res.code_def || res.stage]), indicator: "green" });
                         }
@@ -81,6 +82,40 @@ frappe.ui.form.on("Sales Invoice", {
                     })
                 );
             }, __("DGI"));
+        }
+
+        // --- HL2: live update while the MCF operation is processed by the site gateway ---
+        if (!frm.__dgi_rt) {
+            frm.__dgi_rt = true;
+            frappe.realtime.on("dgi_fiscal_operation", (data) => {
+                if (!data || data.invoice !== frm.doc.name) return;
+                if (["Normalized", "Rejected", "Dispute", "Cancelled"].includes(data.status)) {
+                    frappe.show_alert({ message: __("Operation MCF {0} : {1}", [data.operation, __(data.status)]),
+                        indicator: data.status === "Normalized" ? "green" : "red" }, 6);
+                    frm.reload_doc().then(() => {
+                        if (data.status === "Normalized" && frm.doc.docstatus === 0 && !frm.__dgi_submit_asked) {
+                            frm.__dgi_submit_asked = true;
+                            frappe.confirm(__("La facture est normalisee par le MCF (code DEF {0}). La valider maintenant ?",
+                                [frappe.utils.escape_html(frm.doc.custom_dgi_code_def || "")]), () => frm.savesubmit());
+                        }
+                    });
+                }
+            });
+        }
+        if (frm.doc.docstatus === 0 && frm.doc.custom_dgi_operation && frm.doc.custom_dgi_status !== "Normalized") {
+            frappe.call({ method: "dgi_compliance.fiscal.api.operation_status", args: { invoice: frm.doc.name },
+                callback: (r) => {
+                    const m = r.message || {};
+                    if (!m.status || ["Normalized", "Cancelled"].includes(m.status)) return;
+                    const txt = m.status === "Queued" ? __("en file (position {0})", [m.position || 1])
+                        : m.status === "Leased" ? __("en cours sur le MCF")
+                        : m.status === "Uncertain" || m.status === "Checking" ? __("rapprochement en cours avec le MCF")
+                        : __(m.status);
+                    frm.dashboard.add_comment(__("Normalisation MCF {0} : {1}", [m.operation, txt])
+                        + (m.fallback ? " - " + __("secours : e-MCF indisponible") : "")
+                        + (m.error ? " - " + frappe.utils.escape_html(m.error) : ""),
+                        ["Rejected", "Dispute"].includes(m.status) ? "red" : "blue", true);
+                } });
         }
 
         // --- Draft status banner ---

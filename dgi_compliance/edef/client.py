@@ -10,6 +10,7 @@ v3.5 hardening:
 """
 import json
 import time
+import frappe
 import requests
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 
@@ -41,16 +42,12 @@ def call(method: str, path: str, body: dict | None = None, retries: int | None =
     `retries`: max automatic retries on transient failures. Defaults to 2 for idempotent
     methods (GET/PUT), 0 for POST (create is not idempotent)."""
     s = get_settings()
-    # v4.0 HARD GUARD - mutual exclusion of channels: while the physical MCF (USB) mode is
-    # active, NO HTTP request may leave this server towards the DGI. Every caller already
-    # handles a not-ok result dict, so nothing breaks - the exchange is simply refused.
-    if getattr(s, "communication_mode", None) == "MCF Physique (USB)":
-        return {"ok": False, "status": 0, "data": None, "url": path,
-                "error": ("Mode MCF Physique (USB) actif: toute communication e-MCF (API) est "
-                          "bloquee. Repassez sur 'E-MCF (API)' dans DGI Compliance Settings "
-                          "pour reactiver l'API.")}
+    # HL2 (v5.1): the channel is chosen per point de vente fiscal (fiscal.router); an invoice of a
+    # PVF in MCF channel never reaches this client. The global mutual exclusion of v4 is removed.
     base = s.base_url()
-    token = s.get_token()
+    # e-MCF token: the one of the point de vente being normalized (set by tasks.normalize_invoice),
+    # else the global token of DGI Compliance Settings.
+    token = getattr(frappe.local, "dgi_emcf_token", None) or s.get_token()
     if not token:
         return {"ok": False, "status": 0, "data": None, "url": f"{base}{path}",
                 "error": "Jeton e-DEF manquant: configurez le token dans DGI Compliance Settings."}

@@ -45,6 +45,7 @@ FISCAL_FIELDS = (
     "custom_dgi_nim", "custom_dgi_datetime", "custom_dgi_qr_code", "custom_dgi_qr_image",
     "custom_dgi_response", "custom_dgi_normalized_on", "custom_dgi_operator",
     "custom_dgi_operator_name", "custom_dgi_payload_hash", "dgi_invoice_type",
+    "dgi_point_of_sale", "custom_dgi_channel", "custom_dgi_operation",
 )
 _RESULT_FIELDS = ("custom_dgi_uid", "custom_dgi_code_def", "custom_dgi_counters", "custom_dgi_nim",
                   "custom_dgi_datetime", "custom_dgi_qr_code", "custom_dgi_qr_image")
@@ -142,6 +143,34 @@ def manage_draft_normalization_status(doc, method=None):
         return
     if not status:
         doc.custom_dgi_status = "Pending"
+    if not doc.is_new():
+        _guard_mcf_operation(doc)
+
+
+def _guard_mcf_operation(doc):
+    """HL2 - MCF channel. A draft whose operation is still QUEUED may be changed: the operation
+    is cancelled (it never reached the device). Once leased to a gateway, the fiscal content is
+    frozen like a normalized invoice (the MCF may already hold it)."""
+    if not frappe.db.table_exists("DGI Fiscal Operation"):
+        return
+    from dgi_compliance.fiscal.operations import active_operation, cancel_queued_for_invoice
+    op = active_operation(doc.name)
+    if not op:
+        return
+    try:
+        changed = payload_hash(build_invoice_request(doc)) != op.payload_hash
+    except Exception:
+        changed = True
+    if not changed or (op.get("channel") == "e-MCF" and op.status == "Pending"):
+        return
+    if op.status == "Queued":
+        cancel_queued_for_invoice(doc.name, _("Facture modifiee avant traitement par le MCF"))
+        doc.custom_dgi_status = "Pending"
+        doc.custom_dgi_operation = None
+        return
+    frappe.throw(_("Cette facture est en cours de normalisation sur le canal {2} (operation {0}, statut {1}). "
+                   "Son contenu fiscal ne peut plus etre modifie.").format(op.name, op.status, op.get("channel") or "MCF"),
+                 title=_("Normalisation DGI en cours"))
 
 
 # ---------------- document events ----------------
@@ -171,9 +200,11 @@ def before_sales_invoice_submit(doc, method=None):
         return
     if doc.get("custom_dgi_status") == "Normalized" and doc.get("custom_dgi_code_def"):
         return
-    if settings.is_mcf_mode() and doc.get("custom_dgi_status") == "Normalized":
+    channel = _channel_of(doc, settings)
+    if channel == "MCF":
+        _submit_gate_mcf(doc, settings)
         return
-    if settings.auto_normalize and not settings.is_mcf_mode() and not frappe.db.exists("Sales Invoice", doc.name):
+    if settings.auto_normalize and not frappe.db.exists("Sales Invoice", doc.name):
         # Brand-new invoice inserted and submitted in one call (POS): there is no draft to keep
         # the fiscal state, so the normalization runs in on_submit, AFTER the accounting entries,
         # inside the same transaction: any failure rolls everything back (no orphan at the DGI).
@@ -185,13 +216,54 @@ def before_sales_invoice_submit(doc, method=None):
               "puis soumettez-la (ou activez 'Auto-normalize on Submit' dans DGI Compliance Settings)."),
             title=_("Normalisation DGI requise"))
     res = normalize_invoice(doc, settings) or {}
-    if doc.get("custom_dgi_status") == "Normalized":
+    if doc.get("custom_dgi_status") == "Normalized" or \
+            frappe.db.get_value("Sales Invoice", doc.name, "custom_dgi_status") == "Normalized":
+        for f in _RESULT_FIELDS + ("custom_dgi_status", "custom_dgi_channel", "custom_dgi_operation"):
+            doc.set(f, frappe.db.get_value("Sales Invoice", doc.name, f))
         return
+    if res.get("stage") == "queued-mcf":
+        frappe.throw(_("e-MCF indisponible : facture transmise au MCF de secours (operation {0}, position {1}). "
+                       "Elle sera validable des reception des elements de securite.")
+                     .format(res.get("operation"), res.get("position") or 1), title=_("Secours MCF"))
     frappe.throw(
         _("Soumission bloquee: la facture n'a pas pu etre normalisee par la DGI.<br><b>{0}</b><br>"
           "Corrigez la cause puis soumettez a nouveau. Aucune facture ne peut etre enregistree sans "
           "les elements de securite de l'e-MCF.").format(res.get("message") or doc.get("custom_dgi_error") or res.get("stage", "?")),
         title=_("Normalisation DGI requise"))
+
+
+def _channel_of(doc, settings):
+    from dgi_compliance.fiscal.router import RoutingError, route
+    try:
+        return route(doc, settings).channel
+    except RoutingError as e:
+        if doc.name and frappe.db.exists("Sales Invoice", doc.name):
+            _mark_error(doc, str(e))       # kept on the draft: the submit itself is rolled back
+            _commit()
+        frappe.throw(str(e), title=_("Point de vente fiscal"))
+
+
+def _submit_gate_mcf(doc, settings):
+    """MCF channel (HL2): the security elements come back asynchronously from the site gateway.
+    The invoice must exist as a draft so that its operation survives the end of this request."""
+    if not frappe.db.exists("Sales Invoice", doc.name):
+        frappe.throw(_("Ce point de vente normalise sur le MCF : enregistrez d'abord la facture (brouillon), "
+                       "elle sera validable des reception des elements de securite du MCF."),
+                     title=_("Normalisation MCF"))
+    if not settings.auto_normalize:
+        frappe.throw(_("Cette facture n'est pas encore normalisee. Cliquez sur DGI > 'Normaliser (DGI)', "
+                       "puis soumettez-la."), title=_("Normalisation DGI requise"))
+    res = normalize_invoice(doc, settings) or {}
+    if frappe.db.get_value("Sales Invoice", doc.name, "custom_dgi_status") == "Normalized":
+        for f in _RESULT_FIELDS + ("custom_dgi_status", "custom_dgi_channel", "custom_dgi_operation"):
+            doc.set(f, frappe.db.get_value("Sales Invoice", doc.name, f))
+        return
+    if res.get("stage") == "queued-mcf":
+        frappe.throw(_("Facture transmise au MCF (operation {0}, position {1} dans la file). Elle pourra etre "
+                       "validee des reception des elements de securite.").format(res.get("operation"), res.get("position") or 1),
+                     title=_("Normalisation MCF en cours"))
+    frappe.throw(_("Soumission bloquee : {0}").format(res.get("message") or doc.get("custom_dgi_error") or "?"),
+                 title=_("Normalisation DGI requise"))
 
 
 def on_sales_invoice_submit(doc, method=None):
@@ -205,6 +277,9 @@ def on_sales_invoice_submit(doc, method=None):
     finally:
         frappe.flags.dgi_no_commit = False
     if doc.get("custom_dgi_status") != "Normalized":
+        if res.get("stage") == "queued-mcf" or res.get("fallback_eligible"):
+            frappe.throw(_("L'e-MCF est indisponible : ce point de vente passe sur son MCF de secours. Enregistrez "
+                           "la facture en brouillon, puis validez-la."), title=_("Secours MCF"))
         frappe.throw(
             _("Soumission annulee: la facture n'a pas pu etre normalisee par la DGI.<br><b>{0}</b>").format(
                 res.get("message") or doc.get("custom_dgi_error") or res.get("stage", "?")),
@@ -230,11 +305,14 @@ def on_sales_invoice_cancel(doc, method=None):
     settings = get_settings()
     if not settings.enabled:
         return
-    if settings.is_mcf_mode():
+    if frappe.db.table_exists("DGI Fiscal Operation"):
+        from dgi_compliance.fiscal.operations import cancel_queued_for_invoice
+        cancel_queued_for_invoice(doc.name, _("Facture annulee"))
+    if frappe.db.table_exists("DGI MCF Job"):
         from dgi_compliance.mcf.jobs import cancel_pending_jobs
         cancel_pending_jobs(doc.name)
     uid = doc.get("custom_dgi_uid")
-    if uid and not settings.is_mcf_mode():
+    if uid and doc.get("custom_dgi_channel") != "MCF":
         res = client.cancel_invoice(uid)
         log_exchange("cancel-pending", {"uid": uid}, res.get("data"), res.get("error"),
                      status_code=res.get("status"), reference_invoice=doc.name)
@@ -253,6 +331,16 @@ def on_sales_invoice_trash(doc, method=None):
               "Soumettez-la ou annulez la demande en attente.").format(
                 doc.name, doc.get("custom_dgi_uid") or doc.get("custom_dgi_code_def")),
             title=_("Suppression interdite"))
+    if frappe.db.table_exists("DGI Fiscal Operation"):
+        from dgi_compliance.fiscal.operations import active_operation, cancel_queued_for_invoice
+        op = active_operation(doc.name)
+        if op and op.status != "Queued":
+            frappe.throw(_("La facture {0} est en cours de normalisation sur le MCF (operation {1}) : elle ne peut "
+                           "pas etre supprimee.").format(doc.name, op.name), title=_("Suppression interdite"))
+        cancel_queued_for_invoice(doc.name, _("Facture supprimee"))
+        # the operation keeps the invoice number (fn) for the audit trail; the link is released
+        frappe.db.sql("update `tabDGI Fiscal Operation` set sales_invoice=NULL where sales_invoice=%s "
+                      "and status in ('Cancelled', 'Rejected')", doc.name)
 
 
 def protect_fiscal_fields(doc, method=None):
@@ -313,6 +401,8 @@ def clear_uncertain_confirmation(invoice: str, verified_not_registered: int = 0)
     _set(doc, {"custom_dgi_uid": None, "custom_dgi_status": "Pending", "custom_dgi_error": None})
     log_exchange("uncertain-cleared", {"invoice": invoice, "uid": old, "by": frappe.session.user},
                  None, reference_invoice=invoice)
+    from dgi_compliance.fiscal.journal import close_uncertain_emcf
+    close_uncertain_emcf(invoice, frappe.session.user)
     _commit()
     return {"ok": True}
 
@@ -413,7 +503,9 @@ def _reuse_or_create(doc, dto):
                    .format(created.get("status")))
     if is_retryable(created):
         msg += " " + _("(erreur temporaire: reessayez)")
-    return None, None, {"stage": "create", "message": msg}
+    from dgi_compliance.fiscal.fallback import unavailable
+    return None, None, {"stage": "create", "message": msg,
+                        "unavailable": unavailable(created) and not data.get("errorCode")}
 
 
 def verify_amounts(doc, dto, resp, settings):
@@ -451,12 +543,71 @@ def normalize_invoice(doc, settings=None):
             return {"ok": True, "stage": "normalized", "uid": doc.get("custom_dgi_uid"),
                     "code_def": doc.get("custom_dgi_code_def")}
 
-    if settings.is_mcf_mode():
-        from dgi_compliance.mcf.jobs import queue_mcf_job
-        res = queue_mcf_job(doc, settings)
-        _commit()
-        return res
+    # v5.3.0: point de vente, canal, equipement (fiscal.router) ; journal unique (fiscal.journal)
+    from dgi_compliance.fiscal import fallback as FB
+    from dgi_compliance.fiscal import journal as J
+    from dgi_compliance.fiscal.router import CHANNEL_EMCF, CHANNEL_MCF, SECOURS_AUTO, RoutingError, route
+    if not doc.is_new() and frappe.db.exists("Sales Invoice", doc.name):
+        frappe.db.sql("select name from `tabSales Invoice` where name=%s for update", doc.name)
+    try:
+        fiscal_route = route(doc, settings, force_channel=frappe.flags.get("dgi_force_channel"))
+    except RoutingError as e:
+        return _fail(doc, "route", str(e))
+    J.record_summary(doc, fiscal_route)
+    if fiscal_route.point_of_sale and doc.get("dgi_point_of_sale") != fiscal_route.point_of_sale \
+            and frappe.db.exists("Sales Invoice", doc.name):
+        doc.db_set({"dgi_point_of_sale": fiscal_route.point_of_sale, "dgi_pos_auto": 1}, update_modified=False)
+    busy = J.check_active(doc, fiscal_route.channel)
+    if busy:
+        frappe.msgprint(busy["message"], title=_("Normalisation DGI"), indicator="orange")
+        return busy
+    if fiscal_route.open_fallback:
+        FB.activate(fiscal_route.point_of_sale, fiscal_route.open_fallback["reason"],
+                    fiscal_route.open_fallback["from"], fiscal_route.open_fallback["to"])
+    if fiscal_route.channel == CHANNEL_MCF:
+        return _queue_mcf(doc, settings, fiscal_route, fallback_reason=fiscal_route.fallback_reason)
 
+    # e-MCF; the MCF of the same point de vente takes over on a proven non-reception (fiscal.fallback)
+    alternate = fiscal_route.alternate
+    frappe.local.dgi_emcf_token = fiscal_route.emcf_token
+    frappe.flags.dgi_fallback_possible = bool(alternate)
+    op_name = J.start_emcf(doc, fiscal_route)
+    try:
+        res = _normalize_emcf(doc, settings)
+    except Exception as e:
+        J.finish_emcf(op_name, doc, {"ok": False, "stage": "exception", "message": str(e)})
+        _commit()
+        raise
+    finally:
+        frappe.local.dgi_emcf_token = None
+        frappe.flags.dgi_fallback_possible = False
+    J.finish_emcf(op_name, doc, res)
+    _commit()
+    if alternate and isinstance(res, dict) and res.get("fallback_eligible"):
+        FB.activate(fiscal_route.point_of_sale, res.get("message"), CHANNEL_EMCF, CHANNEL_MCF)
+        alternate.rules = list(fiscal_route.rules) + [SECOURS_AUTO]
+        alternate.fallback_reason = res.get("message")
+        alternate.decision = dict(fiscal_route.decision, channel=CHANNEL_MCF, rules=alternate.rules,
+                                  fallback_reason=res.get("message"), equipment={"nid": alternate.device})
+        J.record_summary(doc, alternate)
+        return _queue_mcf(doc, settings, alternate, fallback_reason=res.get("message"))
+    return res
+
+
+def _queue_mcf(doc, settings, fiscal_route, fallback_reason=None):
+    from dgi_compliance.fiscal.mcf_payload import MCFPayloadError
+    from dgi_compliance.fiscal.operations import request_mcf_normalization
+    try:
+        res = request_mcf_normalization(doc, settings, fiscal_route, fallback_reason=fallback_reason)
+    except MCFPayloadError as e:
+        _mark_error(doc, str(e))
+        _commit()
+        raise
+    _commit()
+    return res
+
+
+def _normalize_emcf(doc, settings):
     # 1. Request
     try:
         dto = build_invoice_request(doc)
@@ -473,7 +624,13 @@ def normalize_invoice(doc, settings=None):
     # 2. Pending request of this invoice, else a new one (UID persisted at once)
     uid, resp, failure = _reuse_or_create(doc, dto)
     if failure:
-        return _fail(doc, failure["stage"], failure["message"])
+        if failure.get("unavailable") and frappe.flags.get("dgi_fallback_possible"):
+            # no CONFIRM was ever sent for this invoice: a pending e-MCF request (if any) expires by itself
+            log_exchange("fallback-mcf", {"invoice": doc.name}, None, failure["message"], reference_invoice=doc.name)
+            return {"ok": False, "stage": failure["stage"], "message": failure["message"], "fallback_eligible": True}
+        res = _fail(doc, failure["stage"], failure["message"])
+        res["unavailable"] = bool(failure.get("unavailable"))
+        return res
     _set(doc, {"custom_dgi_uid": uid})
     _commit()
 
@@ -518,6 +675,7 @@ def normalize_invoice(doc, settings=None):
     op = dto.get("operator") or {}
     _set(doc, {
         "custom_dgi_status": "Normalized",
+        "custom_dgi_channel": "e-MCF",
         "custom_dgi_code_def": cdata.get("codeDEFDGI"),
         "custom_dgi_counters": cdata.get("counters"),
         "custom_dgi_nim": cdata.get("nim"),
