@@ -37,7 +37,7 @@ def effective_priority(row) -> int:
 
 class DGIComplianceSettings(Document):
     def validate(self):
-        self._validate_communication_mode()
+        self._validate_primary_channel()
         # Security: warn (do not block) when the active e-DEF endpoint is not HTTPS.
         url = self.base_url()
         if url and not url.lower().startswith("https://"):
@@ -100,31 +100,44 @@ class DGIComplianceSettings(Document):
         # Password fields are decrypted via get_password()
         return self.get_password("token", raise_exception=False) or ""
 
-    # ---- v4.0: communication mode (e-MCF API vs physical MCF over USB) ----
+    # ---- v5.3.0: canal prioritaire (replaces the v4 communication mode) ----
+
+    def primary(self) -> str:
+        from dgi_compliance.fiscal.router import default_channel
+        return default_channel(self)
+
+    def emcf_configured(self) -> bool:
+        """An e-MCF can be called: global token, or a token on a point de vente."""
+        if self.get_token():
+            return True
+        for name in frappe.get_all("DGI Point of Sale", filters={"is_active": 1}, pluck="name"):
+            try:
+                if frappe.get_doc("DGI Point of Sale", name).get_password("token", raise_exception=False):
+                    return True
+            except Exception:
+                continue
+        return False
 
     def is_mcf_mode(self) -> bool:
-        """True when the physical MCF (USB agent) is the active channel. While True, the
-        e-DEF HTTP client refuses every call (see edef/client.py) - strict mutual exclusion."""
-        return (self.get("communication_mode") or "E-MCF (API)") == "MCF Physique (USB)"
+        """v4 compatibility: True only when nothing can use the e-MCF (MCF prioritaire and no e-MCF token
+        anywhere). The e-MCF jobs (reference sync, token monitoring) are then skipped."""
+        return self.primary() == "MCF" and not self.emcf_configured()
 
-    def _validate_communication_mode(self):
-        if not self.has_value_changed("communication_mode"):
+    def _validate_primary_channel(self):
+        if self.is_new() or not self.has_value_changed("primary_channel"):
             return
-        if self.is_mcf_mode():
-            frappe.msgprint(
-                _("Mode MCF Physique (USB) active: toutes les communications e-MCF (API) sont "
-                  "desormais BLOQUEES (aucune requete/webhook vers la DGI). La normalisation "
-                  "passe par l'agent MCF local."),
-                indicator="orange", title=_("Mode de communication"))
-        else:
-            pending = frappe.db.count("DGI MCF Job", {"status": ["in", ["Queued", "In Progress"]]}) \
-                if frappe.db.table_exists("DGI MCF Job") else 0
-            msg = _("Mode E-MCF (API) active: l'agent MCF physique est desormais bloque "
-                    "(pull/push refuses).")
-            if pending:
-                msg += " " + _("Attention: {0} job(s) MCF en attente ne seront PAS traites; "
-                               "annulez-les ou re-normalisez ces factures via l'API.").format(pending)
-            frappe.msgprint(msg, indicator="orange", title=_("Mode de communication"))
+        frappe.msgprint(_("Canal prioritaire : {0}. Les points de vente sans derogation ni bascule manuelle "
+                          "le suivent ; l'autre canal sert de secours selon leur politique.").format(self.primary_channel),
+                        indicator="orange", title=_("Canal prioritaire"))
+
+    def on_update(self):
+        before = self.get_doc_before_save()
+        if before and (before.get("primary_channel") or "") != (self.get("primary_channel") or ""):
+            from dgi_compliance.dgi_compliance.doctype.dgi_point_of_sale.dgi_point_of_sale import refresh_active_channels
+            from dgi_compliance.gateway.events import log_event
+            refresh_active_channels()
+            log_event(None, "PRIORITE_MODIFIEE", _("Canal prioritaire general : {0} -> {1} par {2}.").format(
+                before.get("primary_channel") or "-", self.primary_channel, frappe.session.user), level="Alerte")
 
     def payment_type_for(self, mode_of_payment: str, strict: bool = False) -> str | None:
         """Resolve the e-DEF payment type for an ERPNext Mode of Payment (v3.6).

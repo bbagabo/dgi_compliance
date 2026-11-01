@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "Helosystemes"
 app_description = "DGI RDC e-MCF / facture normalisee pour ERPNext v16 (application independante, upgrade-safe)"
-app_version = "5.0.5"
+app_version = "5.3.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -24,6 +24,7 @@ doc_events = {
             "dgi_compliance.edef.rounding.apply_vat_ceiling",
             "dgi_compliance.edef.matrix.validate_sales_invoice",
             "dgi_compliance.edef.matrix.validate_currency",
+            "dgi_compliance.fiscal.journal.validate_routing_fields",
             "dgi_compliance.edef.tasks.manage_draft_normalization_status",
         ],
         "before_print": "dgi_compliance.edef.tasks.register_print",
@@ -34,6 +35,9 @@ doc_events = {
         "on_trash": "dgi_compliance.edef.tasks.on_sales_invoice_trash",
         "before_update_after_submit": "dgi_compliance.edef.tasks.protect_fiscal_fields",
     },
+    # v5.3.0: only fiscal managers map a POS Profile / a warehouse to a point de vente fiscal
+    "POS Profile": {"validate": "dgi_compliance.fiscal.mapping.validate_mapping"},
+    "Warehouse": {"validate": "dgi_compliance.fiscal.mapping.validate_mapping"},
     "Customer": {
         # v5.0.4: keep the country typed in the quick-entry dialog when "Edit Full Form" is used.
         "before_insert": "dgi_compliance.edef.customer.map_quick_entry_address_country",
@@ -66,10 +70,18 @@ jinja = {
 after_install = "dgi_compliance.edef.seed.after_install"
 
 scheduler_events = {
+    "cron": {
+        # HL2 - MCF channel: expired leases -> Uncertain, silent gateways (every minute)
+        "* * * * *": ["dgi_compliance.fiscal.operations.scheduled_maintenance"],
+    },
+    "hourly": [
+        "dgi_compliance.fiscal.operations.scheduled_sync_age",
+    ],
     "daily": [
         "dgi_compliance.edef.tasks.check_token_expiry",
         "dgi_compliance.edef.sync.scheduled_sync",
         "dgi_compliance.edef.audit.scheduled_purge",
+        "dgi_compliance.fiscal.operations.daily_sync_reminder",
     ],
 }
 
@@ -81,7 +93,8 @@ default_log_clearing_doctypes = {
 # --- Custom Fields shipped as fixtures (upgrade-safe). Re-export with:
 #     bench --site <site> export-fixtures --app dgi_compliance
 fixtures = [
-    {"dt": "Role", "filters": [["name", "in", ["DGI MCF Agent"]]]},
+    {"dt": "Role", "filters": [["name", "in", ["DGI MCF Agent", "DGI Fiscal Manager", "DGI Gateway",
+                                         "DGI Caisse MCF"]]]},
     {"dt": "Custom Field", "filters": [["name", "in", [
         "Sales Invoice-custom_dgi_input_section",
         "Sales Invoice-dgi_invoice_type",
@@ -116,6 +129,14 @@ fixtures = [
         "Sales Invoice-custom_dgi_print_count",
         "Sales Invoice-custom_dgi_first_printed_on",
         "Sales Invoice-custom_dgi_last_printed_on",
+        "Sales Invoice-dgi_point_of_sale",
+        "Sales Invoice-custom_dgi_channel",
+        "Sales Invoice-custom_dgi_operation",
+        "Sales Invoice-dgi_pos_auto",
+        "Sales Invoice-dgi_pos_arbitration",
+        "Sales Invoice-dgi_pos_arbitrated_by",
+        "Sales Invoice-dgi_routing_summary",
+        "Warehouse-dgi_point_of_sale",
         "Customer-dgi_customer_type",
         "Customer-dgi_registration_no",
         "Item-dgi_item_type",

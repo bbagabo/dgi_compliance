@@ -1,0 +1,238 @@
+{
+ "doctype": "DocType",
+ "name": "DGI Gateway",
+ "module": "DGI Compliance",
+ "custom": 0,
+ "engine": "InnoDB",
+ "autoname": "field:gateway_id",
+ "title_field": "gateway_id",
+ "track_changes": 1,
+ "description": "Passerelle fiscale de site : service installe sur le poste ou le MCF est branche. Identite propre (cle Ed25519), connexions sortantes uniquement.",
+ "fields": [
+  {
+   "fieldname": "gateway_id",
+   "fieldtype": "Data",
+   "label": "Identifiant",
+   "reqd": 1,
+   "unique": 1,
+   "in_list_view": 1,
+   "description": "Ex. GW-LEMBA-01"
+  },
+  {
+   "fieldname": "kind",
+   "fieldtype": "Select",
+   "label": "Type de passerelle",
+   "options": "Poste navigateur\nService (poste dedie)",
+   "default": "Poste navigateur",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Poste navigateur : la caisse ou le MCF est branche (Chrome/Edge, page Poste MCF), active quand la caisse travaille. Service : programme sur un poste allume en permanence."
+  },
+  {
+   "fieldname": "point_of_sale",
+   "fieldtype": "Link",
+   "label": "Point de vente fiscal",
+   "options": "DGI Point of Sale",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "mcf_device",
+   "fieldtype": "Link",
+   "label": "MCF pilote",
+   "options": "DGI MCF Device",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Societe",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Nouvelle\nCode emis\nA approuver\nActive\nRevoquee",
+   "default": "Nouvelle",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "key_fingerprint",
+   "fieldtype": "Data",
+   "label": "Empreinte de la cle",
+   "read_only": 1,
+   "bold": 1,
+   "description": "A comparer avec l'empreinte affichee sur le poste avant approbation."
+  },
+  {
+   "fieldname": "key_algorithm",
+   "fieldtype": "Data",
+   "label": "Algorithme de la cle",
+   "read_only": 1
+  },
+  {
+   "fieldname": "enrolled_by",
+   "fieldtype": "Link",
+   "label": "Enrole par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_seen",
+   "fieldtype": "Datetime",
+   "label": "Dernier signal",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "sb_port",
+   "fieldtype": "Section Break",
+   "label": "Port du MCF (exigence 1.23)"
+  },
+  {
+   "fieldname": "serial_port",
+   "fieldtype": "Data",
+   "label": "Port serie",
+   "description": "Ex. COM3 ou /dev/facno-mcf. Vide : la passerelle cherche le port dont le NID est celui attendu.",
+   "depends_on": "eval:doc.kind=='Service (poste dedie)'"
+  },
+  {
+   "fieldname": "baudrate",
+   "fieldtype": "Int",
+   "label": "Vitesse (bit/s)",
+   "default": "115200"
+  },
+  {
+   "fieldname": "sb_tech",
+   "fieldtype": "Section Break",
+   "label": "Technique",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "public_key",
+   "fieldtype": "Small Text",
+   "label": "Cle publique (Ed25519, base64)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "api_user",
+   "fieldtype": "Link",
+   "label": "Utilisateur technique",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "enrollment_code_hash",
+   "fieldtype": "Data",
+   "label": "Empreinte du code",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "enrollment_expires",
+   "fieldtype": "Datetime",
+   "label": "Code valable jusqu'au",
+   "read_only": 1
+  },
+  {
+   "fieldname": "code_issued_by",
+   "fieldtype": "Link",
+   "label": "Code emis par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "enrolled_on",
+   "fieldtype": "Datetime",
+   "label": "Enrolee le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approuvee par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_on",
+   "fieldtype": "Datetime",
+   "label": "Approuvee le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revoked_on",
+   "fieldtype": "Datetime",
+   "label": "Revoquee le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "gateway_version",
+   "fieldtype": "Data",
+   "label": "Version de la passerelle",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_ip",
+   "fieldtype": "Data",
+   "label": "Derniere adresse IP",
+   "read_only": 1
+  },
+  {
+   "fieldname": "offline_alert",
+   "fieldtype": "Check",
+   "label": "Alerte hors ligne envoyee",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "host_info",
+   "fieldtype": "Small Text",
+   "label": "Poste",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  }
+ ]
+}

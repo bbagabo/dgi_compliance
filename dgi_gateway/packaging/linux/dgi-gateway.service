@@ -1,0 +1,51 @@
+# /etc/systemd/system/dgi-gateway.service - passerelle fiscale de site (un MCF par passerelle)
+[Unit]
+Description=DGI Gateway - passerelle MCF <-> ERPNext (dgi_compliance)
+Documentation=file:///opt/dgi-gateway/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=dgi-gateway
+Group=dgi-gateway
+SupplementaryGroups=dialout
+ExecStart=/opt/dgi-gateway/venv/bin/dgi-gateway run
+Restart=always
+RestartSec=5
+# SIGTERM : la passerelle termine l'echange MCF en cours puis s'arrete (une facture en attente
+# de reponse DGI peut prendre jusqu'a mcf_pending_timeout_s = 90 s). Un arret force reste sans
+# danger : le journal local et la relecture C1h reglent la facture au redemarrage.
+TimeoutStopSec=100
+KillSignal=SIGTERM
+
+# --- durcissement : le service ne lit que sa configuration, n'ecrit que son dossier de donnees
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/dgi-gateway
+ReadOnlyPaths=/etc/dgi-gateway
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+# sorties HTTPS uniquement (aucun port en ecoute)
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# acces materiel limite aux ports serie / COM virtuels USB
+DevicePolicy=closed
+DeviceAllow=char-ttyACM rw
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyS rw
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

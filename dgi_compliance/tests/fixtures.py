@@ -150,10 +150,29 @@ def _company_address():
                     "links": [{"link_doctype": "Company", "link_name": COMPANY}]}).insert(ignore_permissions=True)
 
 
+HL1_PVF = "HL1 SIEGE"
+
+
+def _hl1_point_of_sale():
+    """v5.3.0: an invoice without any source and a company with several points de vente is blocked
+    (AUCUNE_SOURCE). The HL1 tests use the general token through an explicit default point de vente."""
+    if frappe.db.exists("DGI Point of Sale", HL1_PVF):
+        frappe.db.set_value("DGI Point of Sale", HL1_PVF, {"primary_channel": None, "priority_reason": None,
+                                                         "forced_switch": None, "active_channel": "e-MCF",
+                                                         "is_active": 1, "fallback_policy": "Aucune"})
+        return HL1_PVF
+    frappe.get_doc({"doctype": "DGI Point of Sale", "pos_name": HL1_PVF, "company": COMPANY, "is_active": 1,
+                    "is_sales_location": 0, "nid_requirement": "Optional", "token_requirement": "Optional",
+                    "fallback_policy": "Aucune"}).insert(ignore_permissions=True)
+    return HL1_PVF
+
+
 def _settings():
     s = frappe.get_single("DGI Compliance Settings")
     s.enabled = 1
     s.communication_mode = "E-MCF (API)"
+    s.primary_channel = "e-MCF"
+    s.default_point_of_sale = _hl1_point_of_sale()
     s.environment = "Test"
     s.base_url_test = "https://developper.dgirdc.cd/edef"
     s.token = TOKEN

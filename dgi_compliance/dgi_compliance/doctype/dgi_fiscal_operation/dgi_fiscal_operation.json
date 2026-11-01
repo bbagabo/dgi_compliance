@@ -1,0 +1,297 @@
+{
+ "doctype": "DocType",
+ "name": "DGI Fiscal Operation",
+ "module": "DGI Compliance",
+ "custom": 0,
+ "engine": "InnoDB",
+ "autoname": "format:OPF-{#######}",
+ "track_changes": 0,
+ "in_create": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "description": "Operation de normalisation sur le canal MCF (file par dispositif). Creee par le SFE, executee par la passerelle du MCF. Jamais supprimee.",
+ "fields": [
+  {
+   "fieldname": "operation_id",
+   "fieldtype": "Data",
+   "label": "Identifiant d'operation",
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "op_type",
+   "fieldtype": "Select",
+   "label": "Type",
+   "options": "NORMALIZE\nRESYNC",
+   "default": "NORMALIZE",
+   "read_only": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Queued\nPending\nLeased\nUncertain\nChecking\nNormalized\nRejected\nCancelled\nDispute\nDone",
+   "default": "Queued",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Queued : en file pour le MCF. Pending : demande e-MCF creee, pas encore confirmee. Leased : prise par le poste. Checking : rapprochement C1h. Uncertain : on ne sait pas si la DGI l'a enregistree. Cancelled : retiree avant envoi ou demande abandonnee."
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Data",
+   "label": "Canal",
+   "read_only": 1,
+   "default": "MCF"
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Facture",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "fn",
+   "fieldtype": "Data",
+   "label": "Numero de facture SFE (FN)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Societe",
+   "options": "Company",
+   "read_only": 1
+  },
+  {
+   "fieldname": "point_of_sale",
+   "fieldtype": "Link",
+   "label": "Point de vente fiscal",
+   "options": "DGI Point of Sale",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "mcf_device",
+   "fieldtype": "Link",
+   "label": "MCF",
+   "options": "DGI MCF Device",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "gateway",
+   "fieldtype": "Link",
+   "label": "Passerelle",
+   "options": "DGI Gateway",
+   "read_only": 1
+  },
+  {
+   "fieldname": "station_user",
+   "fieldtype": "Link",
+   "label": "Operateur du poste MCF",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fallback",
+   "fieldtype": "Check",
+   "label": "Secours (e-MCF indisponible)",
+   "read_only": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "attempt",
+   "fieldtype": "Int",
+   "label": "Tentative",
+   "read_only": 1,
+   "default": "1"
+  },
+  {
+   "fieldname": "check_count",
+   "fieldtype": "Int",
+   "label": "Rapprochements",
+   "read_only": 1
+  },
+  {
+   "fieldname": "previous_operation",
+   "fieldtype": "Link",
+   "label": "Operation precedente",
+   "options": "DGI Fiscal Operation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_times",
+   "fieldtype": "Section Break",
+   "label": "Chronologie"
+  },
+  {
+   "fieldname": "queued_at",
+   "fieldtype": "Datetime",
+   "label": "En file le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "leased_at",
+   "fieldtype": "Datetime",
+   "label": "Attribuee le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "lease_expires_at",
+   "fieldtype": "Datetime",
+   "label": "Fin du bail",
+   "read_only": 1
+  },
+  {
+   "fieldname": "finished_at",
+   "fieldtype": "Datetime",
+   "label": "Terminee le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "label": "Demandee par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_err",
+   "fieldtype": "Section Break",
+   "label": "Erreur"
+  },
+  {
+   "fieldname": "error_code",
+   "fieldtype": "Data",
+   "label": "Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Small Text",
+   "label": "Message",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fallback_reason",
+   "fieldtype": "Small Text",
+   "label": "Cause du secours",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_routing",
+   "fieldtype": "Section Break",
+   "label": "Decision de routage"
+  },
+  {
+   "fieldname": "routing_rule",
+   "fieldtype": "Data",
+   "label": "Regles appliquees",
+   "read_only": 1
+  },
+  {
+   "fieldname": "routing_explanation",
+   "fieldtype": "Small Text",
+   "label": "Explication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nim",
+   "fieldtype": "Data",
+   "label": "NIM (e-MCF)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "emcf_uid",
+   "fieldtype": "Data",
+   "label": "UID de la demande e-MCF",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confirm_sent",
+   "fieldtype": "Check",
+   "label": "Confirmation e-MCF envoyee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "routing_sources",
+   "fieldtype": "Code",
+   "label": "Sources lues",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_data",
+   "fieldtype": "Section Break",
+   "label": "Donnees",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "lease_token",
+   "fieldtype": "Data",
+   "label": "Jeton de bail",
+   "read_only": 1,
+   "hidden": 1
+  },
+  {
+   "fieldname": "payload_hash",
+   "fieldtype": "Data",
+   "label": "Empreinte du contenu fiscal",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Code",
+   "label": "Message envoye a la passerelle",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
+   "fieldname": "result",
+   "fieldtype": "Code",
+   "label": "Resultat recu",
+   "options": "JSON",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts User",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  }
+ ]
+}

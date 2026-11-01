@@ -1,29 +1,21 @@
 frappe.ui.form.on("DGI Compliance Settings", {
     refresh(frm) {
-        // ---- v4.0: communication mode banner + MCF agent health ----
-        if (frm.doc.communication_mode === "MCF Physique (USB)") {
+        // ---- v5.3.0: canal prioritaire + MCF a valider ----
+        if (frm.doc.primary_channel) {
             frm.dashboard.set_headline_alert(
-                __("Mode MCF Physique (USB) actif - toutes les communications e-MCF (API) sont bloquees. La normalisation passe par l'agent MCF local."),
-                "blue");
-            frm.add_custom_button(__("Etat de l'agent MCF"), () => {
-                const seen = frm.doc.mcf_agent_last_seen;
-                const mins = seen ? moment().diff(moment(seen), "minutes") : null;
-                frappe.msgprint({
-                    title: __("Agent MCF"),
-                    indicator: mins !== null && mins < 3 ? "green" : "red",
-                    message: (seen
-                        ? __("Dernier signe de vie: {0} (il y a {1} min)", [frappe.datetime.str_to_user(seen), mins])
-                        : __("Aucun heartbeat recu - l'agent n'a jamais contacte ce site.")) +
-                        "<br><pre style='white-space:pre-wrap'>" +
-                        frappe.utils.escape_html(frm.doc.mcf_agent_status || "") + "</pre>",
-                });
-            }, __("MCF"));
-            frm.add_custom_button(__("Jobs MCF"), () => frappe.set_route("List", "DGI MCF Job"), __("MCF"));
-        } else if (frm.doc.communication_mode) {
-            frm.dashboard.set_headline_alert(
-                __("Mode E-MCF (API) actif - l'agent MCF physique est bloque (pull/push refuses)."),
-                "green");
+                __("Canal prioritaire : {0}. L'autre canal sert de secours automatique, seulement quand le canal prioritaire n'a certainement pas recu la facture (selon la politique de chaque point de vente).",
+                    [frappe.utils.escape_html(frm.doc.primary_channel)]),
+                frm.doc.primary_channel === "MCF" ? "blue" : "green");
         }
+        frappe.db.count("DGI MCF Device", { filters: { status: ["in", ["Detecte", "Declare", "A revalider"]] } }).then((n) => {
+            frm.add_custom_button(__("MCF a valider ({0})", [n]), () =>
+                frappe.set_route("List", "DGI MCF Device", { status: ["in", ["Detecte", "Declare", "A revalider"]] }), __("MCF"));
+        });
+        frm.add_custom_button(__("Rechercher un MCF (sur la caisse)"), () => frappe.msgprint({
+            title: __("Rechercher un MCF"),
+            message: __("ERPNext dans le cloud ne voit pas les ports USB des magasins. Sur la caisse ou le MCF est branche, ouvrez la page <b>Poste MCF</b> (/app/dgi-mcf-station) avec un utilisateur DGI Caisse MCF, choisissez le poste, cliquez <b>Connecter le MCF</b> puis <b>Proposer ce MCF</b>. Le MCF apparait ensuite ici, dans <b>MCF a valider</b> : un responsable compare les valeurs lues et le valide. Aucune activation automatique."),
+        }), __("MCF"));
+        frm.add_custom_button(__("Journal des transmissions"), () => frappe.set_route("List", "DGI Fiscal Operation"), __("MCF"));
         const grp = __("DGI");
 
         const run = (method, args, freezeMsg, done) => {

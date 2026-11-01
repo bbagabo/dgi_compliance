@@ -1,0 +1,131 @@
+{
+ "doctype": "DocType",
+ "name": "DGI Channel Switch",
+ "module": "DGI Compliance",
+ "custom": 0,
+ "engine": "InnoDB",
+ "autoname": "format:BASC-{#####}",
+ "is_submittable": 1,
+ "track_changes": 1,
+ "description": "Changement du canal de normalisation d'un point de vente fiscal (e-MCF <-> MCF). Trace, approuve, et refuse tant qu'une operation est en cours.",
+ "fields": [
+  {
+   "fieldname": "point_of_sale",
+   "fieldtype": "Link",
+   "label": "Point de vente fiscal",
+   "options": "DGI Point of Sale",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "from_channel",
+   "fieldtype": "Data",
+   "label": "Canal actuel",
+   "read_only": 1,
+   "fetch_from": "point_of_sale.active_channel"
+  },
+  {
+   "fieldname": "to_channel",
+   "fieldtype": "Select",
+   "label": "Nouveau canal",
+   "options": "\ne-MCF\nMCF",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Select",
+   "label": "Motif",
+   "options": "\nMise en service\nPanne e-MCF\nPanne MCF\nMaintenance\nRetour au canal principal",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "dgi_reference",
+   "fieldtype": "Data",
+   "label": "Reference de l'accord DGI",
+   "description": "Obligatoire pour une bascule de secours."
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "label": "Demandee par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approuvee par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_on",
+   "fieldtype": "Datetime",
+   "label": "Effective le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_1",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "checks",
+   "fieldtype": "Small Text",
+   "label": "Controles effectues",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cancelled_operations",
+   "fieldtype": "Int",
+   "label": "Operations en file annulees",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "options": "DGI Channel Switch",
+   "read_only": 1,
+   "no_copy": 1,
+   "print_hide": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "report": 1,
+   "submit": 1,
+   "cancel": 0
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "export": 1,
+   "report": 1,
+   "submit": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  }
+ ]
+}
