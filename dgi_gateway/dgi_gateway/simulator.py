@@ -135,7 +135,9 @@ class MCFSimulator(Transport):
         state = "RES" if data == "RESTART" else ("CON" if self.online else "DIS")
         if self.online:
             self.sent = self.tc
-        return f"{self.sent},{self.tc - self.sent},{self._now()},{state}"
+        # optional ER (manufacturer's last message): the MCF tested on 04/11/2026 answers e.g. "Operation terminee!"
+        msg = getattr(self, "server_message", "")
+        return f"{self.sent},{self.tc - self.sent},{self._now()},{state}" + (f",{P.escape_text(msg)}" if msg else "")
 
     def _2b(self, data):
         return P.escape_text(self.taxpayer.get(data, ""))

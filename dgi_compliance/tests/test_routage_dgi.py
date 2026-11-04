@@ -29,11 +29,16 @@ PVF_D = "R DECOUVERTE"
 GW_D = "GW-R-DECOUV"
 
 
+def W(name):
+    """Full warehouse name, whatever the abbreviation of the test company (v5.3.1: no longer 'DTS' hard-coded)."""
+    return f"{name} - {fx.abbr()}"
+
+
 def _wh(name, parent=None, is_group=0):
-    full = f"{name} - DTS"
+    full = W(name)
     if not frappe.db.exists("Warehouse", full):
         frappe.get_doc({"doctype": "Warehouse", "warehouse_name": name, "company": fx.COMPANY, "is_group": is_group,
-                        "parent_warehouse": parent or "All Warehouses - DTS"}).insert(ignore_permissions=True)
+                        "parent_warehouse": parent or W("All Warehouses")}).insert(ignore_permissions=True)
     return full
 
 
@@ -67,11 +72,11 @@ class RoutageBase(HL2Base):
         _wh(WH_LEMBA, parent=group)
         _wh(WH_NGAL)
         frappe.db.set_value("Warehouse", group, "dgi_point_of_sale", PVF_L)
-        frappe.db.set_value("Warehouse", f"{WH_NGAL} - DTS", "dgi_point_of_sale", PVF_N)
+        frappe.db.set_value("Warehouse", W(WH_NGAL), "dgi_point_of_sale", PVF_N)
         if not frappe.db.exists("POS Profile", POS_LEMBA):
             p = frappe.new_doc("POS Profile")
             p.name = POS_LEMBA
-            p.company, p.warehouse, p.currency = fx.COMPANY, "Stores - DTS", "CDF"
+            p.company, p.warehouse, p.currency = fx.COMPANY, W("Stores"), "CDF"
             p.dgi_point_of_sale = PVF_L
             p.disabled = 1          # never picked by ERPNext for the POS invoices of the other test modules
             p.db_insert()
@@ -142,7 +147,7 @@ class TestResolution(RoutageBase):
         self.assertTrue(any("Administrator" in w for w in res["warnings"]))
 
     def test_R04_warehouses_decide_only_without_emission_source_group_inherits(self):
-        si = self.draft(warehouses=[f"{WH_LEMBA} - DTS"])
+        si = self.draft(warehouses=[W(WH_LEMBA)])
         self.assertEqual(R.resolve(si)["rule"], R.DEFAUT_PARAMETRES)          # option off: warehouses ignored
         set_settings(use_warehouse_mapping=1)
         res = R.resolve(si)
@@ -150,12 +155,12 @@ class TestResolution(RoutageBase):
 
     def test_R05_warehouses_of_two_points_of_sale_block(self):
         set_settings(use_warehouse_mapping=1)
-        res = R.resolve(self.draft(warehouses=[f"{WH_LEMBA} - DTS", f"{WH_NGAL} - DTS"]))
+        res = R.resolve(self.draft(warehouses=[W(WH_LEMBA), W(WH_NGAL)]))
         self.assertEqual(res["blocked"]["code"], R.CONFLIT_ENTREPOTS)
 
     def test_R06_centralized_invoice_signalled_or_blocked(self):
         set_settings(use_warehouse_mapping=1)
-        si = self.draft(PVF_L, warehouses=[f"{WH_NGAL} - DTS"])
+        si = self.draft(PVF_L, warehouses=[W(WH_NGAL)])
         res = R.resolve(si)
         self.assertEqual((res["pvf"], res["rule"]), (PVF_L, R.EMISSION))
         self.assertTrue(res["warnings"][0].startswith(R.EMISSION_CENTRALISEE))
@@ -192,7 +197,7 @@ class TestResolution(RoutageBase):
             frappe.db.set_value("DGI Point of Sale", PVF_N, "company", fx.COMPANY)
 
     def test_R10_only_fiscal_managers_map_warehouses_and_pos_profiles(self):
-        wh = frappe.get_doc("Warehouse", f"{WH_NGAL} - DTS")
+        wh = frappe.get_doc("Warehouse", W(WH_NGAL))
         wh.dgi_point_of_sale = PVF_L
         frappe.set_user(CASHIER)
         try:
@@ -489,6 +494,39 @@ class TestDiscovery(RoutageBase):
         finally:
             frappe.set_user("Administrator")
         self.assertTrue(frappe.db.get_value("DGI MCF Device", "RD00000001", "last_connectivity_result").startswith("OK"))
+
+    # ---- v5.3.1 : « Rechercher un MCF (sur ce PC) » depuis DGI Compliance Settings
+    def test_D07_desk_search_proposes_a_detected_mcf_never_active(self):
+        from dgi_compliance.fiscal.registry import propose_from_browser
+        before = count("MCF_PROPOSE")
+        res = propose_from_browser(json.dumps(dict(self.OBS, mid="RD00000007-1")), PVF_D)
+        self.assertEqual((res["nid"], res["status"], res["created"]), ("RD00000007", "Detecte", True))
+        dev = frappe.get_doc("DGI MCF Device", "RD00000007")
+        self.assertEqual((dev.discovered_by, dev.discovered_gateway, dev.nif, dev.point_of_sale or None),
+                         ("Administrator", None, NIF, None))
+        obs = json.loads(dev.last_status)
+        self.assertEqual((obs["proposed_for"], obs["read_by"]), (PVF_D, "browser-desk"))
+        self.assertEqual(count("MCF_PROPOSE"), before + 1)
+
+    def test_D08_desk_search_reserved_to_fiscal_managers(self):
+        from dgi_compliance.fiscal.registry import propose_from_browser
+        frappe.set_user(CASHIER)
+        try:
+            with self.assertRaises(frappe.PermissionError):
+                propose_from_browser(json.dumps(dict(self.OBS, mid="RD00000008-1")), PVF_D)
+        finally:
+            frappe.set_user("Administrator")
+        self.assertFalse(frappe.db.exists("DGI MCF Device", "RD00000008"))
+
+    def test_D09_desk_search_refuses_an_mcf_active_elsewhere(self):
+        from dgi_compliance.fiscal.registry import propose_from_browser
+        frappe.db.set_value("DGI MCF Device", "RD00000001", {"status": "Actif", "point_of_sale": PVF_D})
+        frappe.db.set_value("DGI Point of Sale", PVF_D, "mcf_device", "RD00000001")
+        before = count("MCF_REFUSE")
+        with self.assertRaises(frappe.ValidationError):
+            propose_from_browser(json.dumps(self.OBS), PVF_K)
+        self.assertEqual(count("MCF_REFUSE"), before + 1)
+        self.assertEqual(frappe.db.get_value("DGI MCF Device", "RD00000001", "point_of_sale"), PVF_D)
 
 
 # =========================================================================== section 10 : migration
