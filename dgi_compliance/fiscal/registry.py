@@ -11,6 +11,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils import cint, now_datetime
 
 from dgi_compliance.fiscal import mcf_format as F
@@ -92,6 +93,39 @@ def comparison(nid: str, point_of_sale: str | None = None) -> list[dict]:
          "blocking": 1, "ok": bool(dev.last_mid) and F.nid_of(dev.last_mid) == dev.name},
     ]
     return rows
+
+
+@frappe.whitelist(methods=["POST"])
+@rate_limit(limit=20, seconds=3600)
+def propose_from_browser(observation=None, point_of_sale=None) -> dict:
+    """'Rechercher un MCF (sur ce PC)' in DGI Compliance Settings (v5.3.1).
+
+    The MCF is read by the browser of the computer where it is plugged in (Web Serial: C1h, 2Bh, C2h,
+    no fiscal effect), exactly as on the Poste MCF page, then registered 'Detecte'. Never activated here:
+    a DGI Fiscal Manager validates it afterwards (another person when the two-person rule is on), and
+    NID / NIF are read again at every fiscal operation. Reserved to DGI Fiscal Manager / System Manager."""
+    from dgi_compliance.gateway.events import log_event
+    frappe.only_for(FISCAL_ROLES)
+    obs = frappe.parse_json(observation) if isinstance(observation, str) else (observation or {})
+    if not isinstance(obs, dict):
+        frappe.throw(_("Lecture du MCF invalide."))
+    nid = F.nid_of(str(obs.get("mid") or "")) or _norm(obs.get("nid"))
+    if point_of_sale:
+        if not frappe.db.exists("DGI Point of Sale", point_of_sale):
+            frappe.throw(_("Point de vente {0} introuvable.").format(point_of_sale))
+        other = frappe.db.get_value("DGI Point of Sale", {"mcf_device": nid, "is_active": 1,
+                                                          "name": ["!=", point_of_sale]}) if nid else None
+        if other and frappe.db.get_value(DEVICE, nid, "status") == "Actif":
+            log_event(None, "MCF_REFUSE", _("MCF {0} propose pour {1} alors qu'il est actif sur {2}.")
+                      .format(nid, point_of_sale, other), level="Alerte", device=nid,
+                      point_of_sale=point_of_sale, details={"observation": obs, "by": frappe.session.user})
+            frappe.db.commit()
+            frappe.throw(_("Ce MCF (NID {0}) est deja actif sur un autre point de vente ({1}).").format(nid, other))
+        obs["proposed_for"] = point_of_sale
+    obs["read_by"] = "browser-desk"
+    res = record_observation(obs, frappe.session.user, gateway=None)
+    frappe.db.commit()
+    return res
 
 
 @frappe.whitelist()

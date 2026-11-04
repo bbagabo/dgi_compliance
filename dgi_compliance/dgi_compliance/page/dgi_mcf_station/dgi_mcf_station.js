@@ -341,7 +341,7 @@ class DGIStationPage {
 		if (!dev) return;
 		try {
 			const s = await dev.lock(() => dev.serverStatus());
-			this.log(__("C2h : envoyees {0}, en attente {1}, derniere synchro {2}, etat {3} {4}", [s.sent, s.pending, s.last_sync, s.state, s.error]));
+			this.log(__("C2h : envoyees {0}, disponibles dans le MCF {1}, derniere connexion reussie {2}, etat {3} {4}", [s.sent, s.pending, s.last_sync, s.state, s.error]));
 		} catch (e) { this.log("C2h : " + e.message); }
 	}
 	async read_taxpayer() {
@@ -361,7 +361,7 @@ class DGIStationPage {
 				try { tp[opt] = await dev.taxpayer(opt); } catch (e) { tp[opt] = ""; }
 			}
 			let srv = null;
-			try { srv = await dev.serverStatus(); } catch (e) { srv = { error: e.message }; }
+			try { srv = await dev.serverStatus(); } catch (e) { srv = { read_error: e.message }; }   // v5.3.1: ER != read failure
 			return { st, tp, srv };
 		});
 	}
@@ -397,8 +397,8 @@ class DGIStationPage {
 			const [st, srv] = await dev.lock(async () => [await dev.status(), await dev.serverStatus()]);
 			const same = st.nid === this.gw.mcf_device;
 			result = { ok: same, mid: st.mid, tc: st.tc, dgi: srv,
-				summary: same ? __("C1h OK (MID {0}, compteur {1}) ; C2h : envoyees {2}, en attente {3}, derniere synchro {4}",
-					[st.mid, st.tc, srv.sent, srv.pending, srv.last_sync])
+				summary: same ? __("C1h OK (MID {0}, compteur {1}) ; C2h : envoyees {2}, disponibles dans le MCF {3}, derniere connexion reussie {4}, etat {5}",
+					[st.mid, st.tc, srv.sent, srv.pending, srv.last_sync, srv.state])
 					: __("MCF branche {0} au lieu de {1}", [st.nid, this.gw.mcf_device]) };
 		} catch (e) {
 			result = { ok: false, summary: (e && e.message) || String(e) };

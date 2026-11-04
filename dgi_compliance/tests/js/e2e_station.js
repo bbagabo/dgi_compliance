@@ -29,9 +29,9 @@ rl.on("line", (l) => waiting.shift()(JSON.parse(l)));
 const ask = (req) => new Promise((r) => { waiting.push(r); py.stdin.write(JSON.stringify(req) + "\n"); });
 
 function bench(method, kwargs) {
-	const args = ["--site", "test.local", "execute", method];
+	const args = ["--site", process.env.SITE_NAME || "test.local", "execute", method];
 	if (kwargs) args.push("--kwargs", JSON.stringify(kwargs));
-	const out = execFileSync("su", ["-", "frappe", "-c", `cd ${BENCH} && bench ${args.map((a) => `'${a}'`).join(" ")} 2>/dev/null`]).toString();
+	const out = execFileSync("su", ["-", "frappe", "-c", `[ -f ~/env.sh ] && . ~/env.sh; cd ${BENCH} && bench ${args.map((a) => `'${a}'`).join(" ")} 2>/dev/null`]).toString();
 	return out.trim().split("\n").pop();
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

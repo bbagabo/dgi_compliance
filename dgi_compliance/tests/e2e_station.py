@@ -141,3 +141,46 @@ def validate_discovered():
     res = validate_device(NID_D, PVF_D)
     frappe.db.commit()
     print("VALIDATED=" + res["status"])
+
+
+# --------------------------------------------------------------------------- v5.3.1 : recherche depuis les parametres
+# (e2e_desk_search.js) A fiscal manager opens DGI Compliance Settings on the computer where the MCF is plugged in.
+NID_S, PVF_S = "DSK0000001", "E2E RECHERCHE"
+MANAGER, MANAGER_PASSWORD = "responsable.e2e@example.com", "Respo#E2E-2026!"
+
+
+def prepare_desk_search():
+    frappe.set_user("Administrator")
+    if not frappe.conf.get("allow_tests"):
+        frappe.throw("allow_tests requis")
+    if not frappe.db.exists("User", MANAGER):
+        u = frappe.get_doc({"doctype": "User", "email": MANAGER, "first_name": "Responsable E2E", "user_type": "System User",
+                            "send_welcome_email": 0,
+                            "roles": [{"role": "DGI Fiscal Manager"}, {"role": "Accounts Manager"}]})
+        u.flags.no_welcome_mail = True
+        u.insert(ignore_permissions=True)
+    from frappe.utils.password import update_password
+    update_password(MANAGER, MANAGER_PASSWORD)
+    prepare_user()                                   # the cashier, for the "reserved" check
+    if frappe.db.exists("DGI MCF Device", NID_S):
+        frappe.db.set_value("DGI Point of Sale", {"mcf_device": NID_S}, "mcf_device", None)
+        frappe.db.delete("DGI MCF Device", NID_S)
+    if not frappe.db.exists("DGI Point of Sale", PVF_S):
+        frappe.get_doc({"doctype": "DGI Point of Sale", "pos_name": PVF_S, "company": fx.COMPANY, "is_active": 1,
+                        "is_sales_location": 0, "nid_requirement": "Optional", "token_requirement": "Optional",
+                        "pos_address": "Avenue du Commerce", "pos_city": "Kinshasa"}).insert()
+    frappe.db.set_value("DGI Point of Sale", PVF_S, "mcf_device", None)
+    frappe.db.commit()
+    print("READY=" + PVF_S)
+
+
+def desk_search_state():
+    dev = frappe.db.get_value("DGI MCF Device", NID_S, ["status", "nif", "last_mid", "taxpayer_name", "discovered_by",
+                                                       "discovered_gateway", "point_of_sale", "last_status"],
+                              as_dict=True) or {}
+    obs = frappe.parse_json(dev.pop("last_status", None) or "{}") if dev else {}
+    print("STATE=" + frappe.as_json({"device": dev, "proposed_for": obs.get("proposed_for"), "read_by": obs.get("read_by"),
+                                     "pvf_mcf": frappe.db.get_value("DGI Point of Sale", PVF_S, "mcf_device"),
+                                     "events": frappe.db.count("DGI Gateway Event", {"event_code": "MCF_PROPOSE",
+                                                                                     "mcf_device": NID_S})},
+                                    indent=None))
