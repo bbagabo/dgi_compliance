@@ -13,6 +13,9 @@ frappe.ui.form.on("DGI Compliance Settings", {
         });
         // v5.3.1: the search really reads the MCF plugged into THIS computer (Web Serial, no fiscal effect)
         frm.add_custom_button(__("Rechercher un MCF (sur ce PC)"), () => dgi_search_mcf(), __("MCF"));
+        // v5.3.2: state of every MCF (last connection test, DGI connection) and the page Poste MCF
+        frm.add_custom_button(__("Statut des MCF"), () => frappe.set_route("List", "DGI MCF Device"), __("MCF"));
+        frm.add_custom_button(__("Poste MCF"), () => frappe.set_route("dgi-mcf-station"), __("MCF"));
         frm.add_custom_button(__("Journal des transmissions"), () => frappe.set_route("List", "DGI Fiscal Operation"), __("MCF"));
         const grp = __("DGI");
 
@@ -151,8 +154,7 @@ function dgi_search_mcf() {
         });
         return;
     }
-    frappe.require("/assets/dgi_compliance/js/dgi_mcf.js", async () => {
-        const M = window.DGIMCF;
+    frappe.require(["/assets/dgi_compliance/js/dgi_mcf.js", "/assets/dgi_compliance/js/dgi_mcf_desk.js"], async () => {
         let port;
         try {
             port = await navigator.serial.requestPort({});
@@ -162,20 +164,10 @@ function dgi_search_mcf() {
             return;
         }
         frappe.dom.freeze(__("Lecture du MCF (sans effet fiscal)..."));
-        let read, dev;
+        let read;
         try {
-            const t = await new M.WebSerialTransport(port, { baudRate: 115200 }).open();
-            dev = new M.MCFDevice(t, {});
-            read = await dev.lock(async () => {
-                const st = await dev.status();
-                const tp = {};
-                for (const opt of ["I0", "I1", "I2", "I3", "I4"]) {
-                    try { tp[opt] = await dev.taxpayer(opt); } catch (e) { tp[opt] = ""; }
-                }
-                let srv = null;                              // ER (srv.error) is the MCF's own last error, not a read failure
-                try { srv = await dev.serverStatus(); } catch (e) { srv = { read_error: e.message }; }
-                return { st, tp, srv, port: t.name };
-            });
+            // C1h, C2h, 2Bh I0..I4; the port is closed after the reading (v5.3.2: DGIMCFDesk.read_port)
+            read = await DGIMCFDesk.read_port(port, { taxpayer: true });
         } catch (e) {
             const msg = String((e && e.message) || e);
             frappe.msgprint({
@@ -187,13 +179,13 @@ function dgi_search_mcf() {
             return;
         } finally {
             frappe.dom.unfreeze();
-            if (dev) { try { await dev.close(); } catch (e) { /* already closed */ } }
         }
         dgi_show_mcf(read);
     });
 }
 
-async function dgi_show_mcf({ st, tp, srv, port }) {
+async function dgi_show_mcf(read) {
+    const { st, tp, srv, port } = read;
     const esc = frappe.utils.escape_html;
     const companies = await frappe.db.get_list("Company", { fields: ["name", "tax_id"], limit: 100 });
     const owner = companies.find((c) => String(c.tax_id || "").replace(/\s/g, "").toUpperCase() === String(st.nif || "").toUpperCase());
@@ -204,13 +196,13 @@ async function dgi_show_mcf({ st, tp, srv, port }) {
         [__("MID (NID-activation)"), h(st.mid)], [__("NID"), h(st.nid)],
         [__("NIF du MCF"), h(st.nif) + (owner ? ` <span class="text-success">(${h(owner.name)})</span>`
             : ` <span class="text-danger">(${h(__("aucune societe avec ce NIF"))})</span>`)],
-        [__("Date du MCF"), h(dgi_mcf_dt(st.dt))],
+        [__("Date du MCF"), h(DGIMCFDesk.mcf_dt_user(st.dt))],
         [__("Compteurs (total / ventes / avoirs)"), h(`${st.tc} / ${st.fvc} / ${st.frc}`)],
         [__("Groupes de taxation ({0})", [st.group_count]), h(rates) + (st.group_count > 16 ? ""
             : ` <small>(${h(__("protocole v1.0 : groupes A a P"))})</small>`)],
         [__("Facture ouverte"), h(st.invoice_open ? __("Oui") : __("Non"))],
         [__("Etat"), h((st.flags || []).length ? st.flags.join(", ") : "OK")],
-        [__("Connexion DGI (C2h)"), dgi_c2h_html(srv, st.dt, h)],
+        [__("Connexion DGI (C2h)"), DGIMCFDesk.c2h_html(srv, st.dt)],
         // 2Bh fields as defined by protocol SFE-MCF v1.0 (I0 name, I1 address, I2 city, I3 phone, I4 e-mail):
         // shown one by one so that an MCF configured otherwise is visible before validation
         [__("Contribuable (2Bh)"), [["I0", __("Nom")], ["I1", __("Adresse")], ["I2", __("Ville")], ["I3", __("Telephone")],
@@ -225,22 +217,30 @@ async function dgi_show_mcf({ st, tp, srv, port }) {
     }
     const known = await frappe.db.get_value("DGI MCF Device", { name: st.nid }, "status")
         .then((r) => r.message && r.message.status, () => null);
+    // v5.3.2: an MCF already validated is not proposed again: the reading is recorded as a connection test
+    const to_validate = ["Detecte", "Declare", "A revalider"].includes(known);
+    const tested = known && !to_validate;
+    const note = !known ? ""
+        : tested ? __("Ce MCF existe deja dans ERPNext (etat : {0}). Enregistrez cette lecture comme test de connexion : ERPNext compare le NID, le MID valide, le NIF de la societe, les taux et le poste du point de vente.", [esc(__(known))])
+            : __("Ce MCF existe deja dans ERPNext (etat : {0}) et attend une validation. 'Mettre a jour la proposition' enregistre les valeurs lues ; la validation se fait sur la fiche MCF.", [esc(__(known))]);
     const d = new frappe.ui.Dialog({
         title: __("MCF lu sur ce PC (sans effet fiscal)"),
         size: "large",
         fields: [
-            { fieldtype: "HTML", fieldname: "info", options: table + (known
-                ? `<div class="alert alert-info">${__("Ce MCF existe deja dans ERPNext (etat : {0}).", [esc(__(known))])}</div>` : "") },
-            { fieldtype: "Link", fieldname: "point_of_sale", options: "DGI Point of Sale", label: __("Point de vente prevu (facultatif)") },
+            { fieldtype: "HTML", fieldname: "info", options: table + (note ? `<div class="alert alert-info">${note}</div>` : "") },
+            { fieldtype: "Link", fieldname: "point_of_sale", options: "DGI Point of Sale", label: __("Point de vente prevu (facultatif)"),
+              hidden: tested ? 1 : 0 },
         ],
-        primary_action_label: __("Proposer ce MCF"),
+        primary_action_label: tested ? __("Enregistrer ce test de connexion") : (known ? __("Mettre a jour la proposition") : __("Proposer ce MCF")),
         primary_action: async (v) => {
-            const observation = {
-                mid: st.mid, nid: st.nid, nif: st.nif, tc: st.tc, fvc: st.fvc, frc: st.frc, dt: st.dt,
-                group_count: st.group_count, tax_rates: st.tax_rates, flags: st.flags || [],
+            if (tested) {
+                d.hide();
+                await DGIMCFDesk.test({ read, nid: st.nid, origin: __("Parametres - Rechercher un MCF") });
+                return;
+            }
+            const observation = Object.assign(DGIMCFDesk.observation(read), {
                 taxpayer_name: tp.I0 || "", taxpayer_address: [tp.I1, tp.I2].filter(Boolean).join(", "),
-                taxpayer_phone: tp.I3 || "", taxpayer_email: tp.I4 || "", dgi: srv, port,
-            };
+                taxpayer_phone: tp.I3 || "", taxpayer_email: tp.I4 || "" });
             const r = await frappe.xcall("dgi_compliance.fiscal.registry.propose_from_browser",
                 { observation: JSON.stringify(observation), point_of_sale: v.point_of_sale || null });
             d.hide();
@@ -250,31 +250,9 @@ async function dgi_show_mcf({ st, tp, srv, port }) {
                 primary_action: { label: __("Ouvrir le MCF"), action: () => frappe.set_route("Form", "DGI MCF Device", r.nid) },
             });
         },
+        secondary_action_label: known ? __("Ouvrir la fiche MCF") : undefined,
+        secondary_action: known ? () => { d.hide(); frappe.set_route("Form", "DGI MCF Device", st.nid); } : undefined,
     });
     d.show();
 }
 
-// AAAAMMJJHHmmss (MCF) -> date of the user's format; any other value is shown as read
-function dgi_mcf_dt(v) {
-    const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(v || "");
-    return m ? frappe.datetime.str_to_user(`${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}`) : (v || "");
-}
-
-// C2h (protocol SFE-MCF v1.0): EC sent, DC available in the MCF, DT last successful connection, STA DIS/CON/TRA/RES,
-// optional ER (manufacturer's last error). The SFE must show the last connection and alert beyond 1 day.
-function dgi_c2h_html(srv, mcf_dt, h) {
-    if (!srv) return "";
-    if (srv.read_error) return `<span class="text-danger">${h(srv.read_error)}</span>`;
-    const states = { DIS: __("non connecte au reseau"), CON: __("connecte, aucun envoi en cours"),
-        TRA: __("envoi de donnees en cours"), RES: __("redemarrage en cours") };
-    const ts = (v) => (/^\d{14}$/.test(v || "") ? new Date(+v.slice(0, 4), +v.slice(4, 6) - 1, +v.slice(6, 8),
-        +v.slice(8, 10), +v.slice(10, 12), +v.slice(12, 14)) : null);
-    const last = ts(srv.last_sync), now = ts(mcf_dt) || new Date();
-    const fmt = () => dgi_mcf_dt(srv.last_sync);
-    const old = !last || now - last > 24 * 3600 * 1000;
-    return `${h(srv.state)} (${h(states[srv.state] || __("etat inconnu"))})<br>`
-        + `${h(__("Transactions envoyees"))} : ${h(srv.sent)} · ${h(__("disponibles dans le MCF"))} : ${h(srv.pending)}<br>`
-        + `<span class="${old ? "text-danger" : ""}">${h(__("Derniere connexion reussie a la DGI"))} : ${last ? h(fmt()) : h(__("jamais"))}`
-        + `${old ? " - " + h(__("plus d'un jour : verifiez la connexion du MCF")) : ""}</span>`
-        + (srv.error ? `<br><small>${h(__("Dernier message du MCF"))} : ${h(srv.error)}</small>` : "");
-}

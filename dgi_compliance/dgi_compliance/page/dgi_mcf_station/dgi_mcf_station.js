@@ -1,8 +1,11 @@
 // Page "Poste MCF" (DGI Compliance v5.2.0): the cash desk where the MCF is plugged becomes the
 // gateway of its MCF while this page is open in Chrome / Edge. See public/js/dgi_mcf.js.
+// v5.3.2: the MCF plugged into this PC is read and shown even without a poste (ports already allowed for
+// the site, no fiscal effect, port released after the reading), with its state in ERPNext, a connection test
+// recorded on the MCF, and for a DGI Fiscal Manager the creation of the poste of its point de vente.
 frappe.pages["dgi-mcf-station"].on_page_load = function (wrapper) {
 	const page = frappe.ui.make_app_page({ parent: wrapper, title: __("Poste MCF"), single_column: true });
-	frappe.require("/assets/dgi_compliance/js/dgi_mcf.js", () => {
+	frappe.require(["/assets/dgi_compliance/js/dgi_mcf.js", "/assets/dgi_compliance/js/dgi_mcf_desk.js"], () => {
 		wrapper.dgi_station = new DGIStationPage(page, wrapper);
 	});
 };
@@ -51,6 +54,16 @@ class DGIStationPage {
 				<div class="frappe-card" style="padding:16px;margin-bottom:12px">
 					<div class="dgi-st-setup"></div>
 				</div>
+				<div class="frappe-card dgi-st-probe-card" style="padding:16px;margin-bottom:12px">
+					<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+						<b>${__("MCF branche sur ce PC (lecture sans effet fiscal)")}</b>
+						<span>
+							<button class="btn btn-xs btn-default dgi-st-probe-read">${__("Lire le MCF branche")}</button>
+							<button class="btn btn-xs btn-primary dgi-st-probe-test">${__("Tester la connexion")}</button>
+						</span>
+					</div>
+					<div class="dgi-st-probe"></div>
+				</div>
 				<div class="frappe-card" style="padding:16px;margin-bottom:12px">
 					<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
 						<b>${__("Journal du poste")}</b>
@@ -64,7 +77,10 @@ class DGIStationPage {
 			</div>`);
 		$b.find(".dgi-st-trace").on("change", (e) => { this.trace_on = e.target.checked; });
 		$b.find(".dgi-st-export").on("click", () => this.export_diagnostic());
+		$b.find(".dgi-st-probe-read").on("click", () => this.probe_known(true));
+		$b.find(".dgi-st-probe-test").on("click", () => this.test_connection());
 		this.render_cards();
+		this.render_probe();
 	}
 	card(title, value, color, detail) {
 		return `<div class="col-sm-3"><div class="frappe-card" style="padding:12px;min-height:88px">
@@ -75,11 +91,16 @@ class DGIStationPage {
 	render_cards() {
 		const st = (this.station && this.station.state) || {};
 		const dev = this.device_status || {};
+		const pr = this.probe && this.probe.read;
+		const mcf_card = this.device
+			? this.card(__("MCF"), __("Connecte au poste"), "green", dev.mid ? `${dev.mid} - NIF ${dev.nif}` : "")
+			: pr ? this.card(__("MCF"), __("Detecte sur ce PC"), "blue", `${pr.st.mid} - NIF ${pr.st.nif} - ${pr.port}`)
+				: this.card(__("MCF"), __("Non connecte"), "red",
+					(this.probe && this.probe.error) || __("Brancher le MCF puis cliquer sur Lire le MCF branche"));
 		const cards = [
-			this.card(__("MCF"), this.device ? __("Connecte") : __("Non connecte"), this.device ? "green" : "red",
-				dev.mid ? `${dev.mid} - NIF ${dev.nif}` : __("Brancher le MCF puis cliquer sur Connecter")),
+			mcf_card,
 			this.card(__("Poste"), this.gw ? __(this.gw.status) : __("Non choisi"), this.gw && this.gw.status === "Active" ? "green" : "orange",
-				this.gw ? `${this.gw.name} - ${this.gw.point_of_sale}` : ""),
+				this.gw ? `${this.gw.name} - ${this.gw.point_of_sale}` : ((this.stations && !this.stations.length) ? __("aucun poste cree") : "")),
 			this.card(__("Service"), this.station && this.station.running ? __("En marche") : __("Arrete"),
 				this.station && this.station.running ? (st.server === "connecte" ? "green" : "orange") : "gray",
 				st.last_error ? st.last_error.slice(0, 80) : (st.server || "")),
@@ -143,8 +164,14 @@ class DGIStationPage {
 			return [];
 		});
 		this.render_setup();
-		navigator.serial.addEventListener("connect", () => { if (this.station) this.station.wake(); });
-		navigator.serial.addEventListener("disconnect", () => this.log(__("MCF debranche.")));
+		navigator.serial.addEventListener("connect", () => {
+			if (this.station) this.station.wake();
+			else if (!this.device) this.probe_known(false);          // v5.3.2: MCF plugged in again
+		});
+		navigator.serial.addEventListener("disconnect", () => {
+			this.log(__("MCF debranche."));
+			if (!this.device && this.probe) { this.probe = { error: __("MCF debranche") }; this.render_probe(); this.render_cards(); }
+		});
 		frappe.realtime.on("dgi_mcf_wake", (msg) => {
 			if (this.station && this.gw && msg && msg.device === this.gw.mcf_device) {
 				this.station.wake();
@@ -155,12 +182,13 @@ class DGIStationPage {
 		if (this.remembered.gateway_id && this.stations.some((s) => s.name === this.remembered.gateway_id)) {
 			await this.select(this.remembered.gateway_id, true);
 		}
+		if (!this.device) await this.probe_known(false);
 	}
 
 	render_setup() {
 		const $s = $(this.page.body).find(".dgi-st-setup").empty();
 		if (!this.stations.length) {
-			$s.html(`<p>${__("Aucun poste MCF n'est prevu pour vos points de vente. Un DGI Fiscal Manager doit creer une passerelle de type 'Poste navigateur' (DGI Gateway) et vous communiquer son code d'enrolement.")}</p>`);
+			$s.html(`<p>${__("Aucun poste MCF n'est prevu pour vos points de vente : le MCF peut etre lu et teste ci-dessous, mais il ne recoit pas de factures. Un DGI Fiscal Manager cree le poste (bouton 'Creer le poste MCF' ci-dessous, ou DGI Gateway de type 'Poste navigateur'), puis vous communique son code d'enrolement.")}</p>`);
 			return;
 		}
 		const options = this.stations.map((s) => `<option value="${esc(s.name)}" ${this.gw && this.gw.name === s.name ? "selected" : ""}>${esc(s.name)} - ${esc(s.point_of_sale)} (${esc(__(s.status))})</option>`);
@@ -204,6 +232,7 @@ class DGIStationPage {
 		this.journal = await new this.M.IDBJournal(`dgi-mcf-journal-${this.gw.name}`).open();
 		await this.journal.purge(30);
 		if (auto && !this.device) await this.connect_known_port();
+		this.render_probe();
 		await this.next_step();
 	}
 
@@ -283,6 +312,7 @@ class DGIStationPage {
 	}
 	async use_port(port) {
 		if (this.device) { await this.station_stop_device(); }
+		this.probe = null;
 		const { dev, st } = await this.open_port(port);
 		this.device_status = st;
 		this.log(__("MCF connecte : MID {0}, NIF {1}, compteur total {2}, groupes {3}.", [st.mid, st.nif, st.tc, Object.keys(st.tax_rates).join("")]));
@@ -308,6 +338,7 @@ class DGIStationPage {
 		if (this.station) { this.station.setDevice(dev); this.station.wake(); }
 		this.show_device();
 		this.render_cards();
+		this.render_probe();
 	}
 	async station_stop_device() {
 		if (this.station) await this.station.dropDevice();
@@ -324,6 +355,7 @@ class DGIStationPage {
 				<th>${__("Derniere facture")}</th><td colspan="3">${esc(st.dfn)} ${esc(st.dft)} ${esc(st.dfdt)}</td></tr>
 			<tr><th>${__("Groupes de taxation ({0})", [st.group_count])}</th><td colspan="5">${esc(rates)}</td></tr>
 			<tr><th>${__("Etat")}</th><td colspan="5">${esc((st.flags || []).join(", ") || "OK")}${st.invoice_open ? " - " + __("facture ouverte") : ""}</td></tr></table>`);
+		this.render_probe();
 	}
 	async need_device() {
 		if (this.device) return this.device;
@@ -388,27 +420,150 @@ class DGIStationPage {
 			this.alert(esc((e && e.message) || String(e)), "danger");
 		}
 	}
+	// v5.3.2: one test for every case. With a poste holding the port, it reads through the open port;
+	// otherwise the MCF is read on a port already allowed for the site (or chosen), then released.
+	// ERPNext compares (NID, MID, NIF, rates, poste) and records the result on the MCF (TEST_CONNECTIVITE).
 	async test_connection() {
-		if (!this.gw || !this.gw.mcf_device) { frappe.msgprint(__("Aucun MCF valide pour ce poste.")); return; }
-		const dev = await this.need_device();
-		if (!dev) return;
-		let result;
+		const D = window.DGIMCFDesk;
+		const opts = { origin: this.gw ? __("Poste MCF {0}", [this.gw.name]) : __("Poste MCF (sans poste)"),
+			gateway_id: this.gw ? this.gw.name : null, nid: (this.gw && this.gw.mcf_device) || null };
+		let read = null, error = null, r;
 		try {
-			const [st, srv] = await dev.lock(async () => [await dev.status(), await dev.serverStatus()]);
-			const same = st.nid === this.gw.mcf_device;
-			result = { ok: same, mid: st.mid, tc: st.tc, dgi: srv,
-				summary: same ? __("C1h OK (MID {0}, compteur {1}) ; C2h : envoyees {2}, disponibles dans le MCF {3}, derniere connexion reussie {4}, etat {5}",
-					[st.mid, st.tc, srv.sent, srv.pending, srv.last_sync, srv.state])
-					: __("MCF branche {0} au lieu de {1}", [st.nid, this.gw.mcf_device]) };
+			if (this.device) {
+				const dev = this.device;
+				try {
+					read = await dev.lock(async () => {
+						const t0 = performance.now();
+						const st = await dev.status();
+						const elapsed_ms = Math.round(performance.now() - t0), pc_epoch = Date.now();
+						let srv;
+						try { srv = await dev.serverStatus(); } catch (e) { srv = { read_error: e.message }; }
+						return { st, srv, port: dev.port, elapsed_ms, pc_epoch };
+					});
+					this.device_status = read.st;
+					this.show_device();
+				} catch (e) {
+					error = (e && e.message) || String(e);
+				}
+			} else {
+				const problem = D.browser_problem();
+				if (problem) { this.alert(esc(problem), "danger"); return; }
+				try {
+					read = (await D.choose_and_read(opts.nid)).read;
+					this.probe = { read };
+				} catch (e) {
+					if (e && e.name === "NotFoundError") return;          // window closed without choosing
+					if (!opts.nid) { this.alert(esc((e && e.message) || e), "danger"); return; }
+					error = (e && e.message) || String(e);
+				}
+			}
+			r = await D.record(error ? { error } : D.observation(read), opts);
 		} catch (e) {
-			result = { ok: false, summary: (e && e.message) || String(e) };
+			this.alert(esc((e && e.message) || e), "danger");
+			return;
 		}
-		this.log(__("Test de connexion : {0}", [result.summary]));
+		this.log(__("Test de connexion : {0} - {1}", [r.result, r.summary]));
+		const color = { OK: "success", Avertissement: "warning" }[r.result] || "danger";
+		this.alert(`<b>${esc(__("Test de connexion du MCF {0} : {1}", [r.nid || "?", __(r.result)]))}</b>`
+			+ `<div style="margin-top:8px">${D.checks_html(r.checks)}</div>`, color);
+		if (this.probe && this.probe.read && r.known) {
+			try { this.probe.status = await D.load_status({ nid: r.nid }); } catch (e) { /* no access */ }
+		}
+		this.render_probe();
+		this.render_cards();
+	}
+
+	// ------------------------------------------------------------------ v5.3.2 : MCF branche, sans poste
+	async probe_known(interactive) {
+		if (this.device) return;                          // the poste holds the port
+		const D = window.DGIMCFDesk;
+		if (!D || D.browser_problem()) return;
+		let found = null;
 		try {
-			await frappe.xcall("dgi_compliance.gateway.station.connectivity_test",
-				{ gateway_id: this.gw.name, result: JSON.stringify(result) });
-		} catch (e) { this.log("connectivity_test : " + ((e && e.message) || e)); }
-		this.alert(esc(result.summary), result.ok ? "success" : "danger");
+			found = interactive ? await D.choose_and_read(null) : await D.find_known(null);
+		} catch (e) {
+			if (e && e.name === "NotFoundError") return;   // window closed without choosing
+			this.probe = { error: (e && e.message) || String(e) };
+			this.render_probe(); this.render_cards();
+			return;
+		}
+		if (!found) {
+			if (interactive) this.probe = { error: __("Aucun MCF n'a repondu sur ce port.") };
+			this.render_probe(); this.render_cards();
+			return;
+		}
+		const st = found.read.st;
+		this.probe = { read: found.read };
+		this.log(__("MCF detecte sur ce PC : MID {0}, NIF {1}, port {2} (lecture sans effet fiscal).", [st.mid, st.nif, found.read.port]));
+		try { this.probe.status = await D.load_status({ nid: st.nid }); } catch (e) { this.probe.status = null; }
+		this.render_probe();
+		this.render_cards();
+	}
+
+	render_probe() {
+		const $card = $(this.page.body).find(".dgi-st-probe-card");
+		const $p = $(this.page.body).find(".dgi-st-probe");
+		if (this.device) { $card.hide(); return; }                 // shown in the poste section instead
+		$card.show();
+		const D = window.DGIMCFDesk;
+		if (!D) return;
+		const pr = this.probe;
+		if (!pr || !pr.read) {
+			$p.html(`<p class="text-muted">${esc((pr && pr.error) || __("Aucun MCF lu sur ce PC. Branchez le MCF puis cliquez sur 'Lire le MCF branche' et choisissez son port (USB Serial Device). Un port deja autorise pour ce site est relu automatiquement a l'ouverture de la page."))}</p>`);
+			return;
+		}
+		const s = pr.status || {};
+		const actions = [];
+		if (s.known) {
+			const mine = (this.stations || []).filter((g) => g.point_of_sale === s.point_of_sale && (!this.gw || this.gw.name !== g.name));
+			for (const g of mine) actions.push(`<button class="btn btn-sm btn-default" data-use="${esc(g.name)}">${esc(__("Utiliser le poste {0}", [g.name]))}</button>`);
+			if (s.can_create_station) actions.push(`<button class="btn btn-sm btn-primary dgi-st-create">${esc(__("Creer le poste MCF de {0}", [s.point_of_sale]))}</button>`);
+			actions.push(`<a class="btn btn-sm btn-default" href="/app/dgi-mcf-device/${encodeURIComponent(s.nid)}">${esc(s.status === "Actif" ? __("Ouvrir la fiche MCF") : __("Ouvrir la fiche pour valider ce MCF"))}</a>`);
+		} else if (s.can_manage) {
+			actions.push(`<button class="btn btn-sm btn-primary dgi-st-probe-propose">${esc(__("Proposer ce MCF"))}</button>`);
+		}
+		const erp = s.known ? D.status_html(s)
+			: `<div class="alert alert-warning">${esc(__("Ce MCF (NID {0}) n'existe pas dans ERPNext.", [pr.read.st.nid]))} ${esc(s.can_manage
+				? __("Proposez-le : un responsable le validera ensuite.")
+				: __("Un DGI Fiscal Manager doit le proposer (DGI Compliance Settings > MCF > Rechercher un MCF)."))}</div>`;
+		$p.html(`<div class="row"><div class="col-md-6">${D.read_table(pr.read)}</div>
+			<div class="col-md-6"><div class="text-muted small" style="margin-bottom:4px">${esc(__("Dans ERPNext (dernier etat enregistre ; cliquez sur Tester la connexion pour le mettre a jour)"))}</div>${erp}
+			<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${actions.join("")}</div></div></div>`);
+		$p.find("[data-use]").on("click", (e) => {
+			const name = $(e.currentTarget).attr("data-use");
+			$(this.page.body).find(".dgi-st-gw").val(name);
+			this.select(name);
+		});
+		$p.find(".dgi-st-create").on("click", () => this.create_station(s.point_of_sale));
+		$p.find(".dgi-st-probe-propose").on("click", () => this.propose_probe());
+	}
+
+	async create_station(point_of_sale) {
+		try {
+			const r = await frappe.xcall("dgi_compliance.fiscal.mcf_status.create_station", { point_of_sale });
+			this.stations = await frappe.xcall("dgi_compliance.gateway.station.stations");
+			this.log(__("Poste {0} : {1} pour {2}.", [r.name, r.created ? __("cree") : __("deja existant"), point_of_sale]));
+			await this.select(r.name, true);
+			this.alert(__("Poste MCF {0} {1}. Etape suivante : un responsable ouvre {2} > Passerelle > Generer un code d'enrolement et le communique de vive voix ; saisissez-le ci-dessus, puis le responsable approuve le poste avec l'empreinte affichee.",
+				[esc(r.name), r.created ? __("cree") : __("deja existant"),
+					`<a href="/app/dgi-gateway/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`]), "info");
+		} catch (e) {
+			this.alert(esc((e && e.message) || e), "danger");
+		}
+	}
+
+	async propose_probe() {
+		const pr = this.probe;
+		if (!pr || !pr.read) return;
+		try {
+			const r = await frappe.xcall("dgi_compliance.fiscal.registry.propose_from_browser",
+				{ observation: JSON.stringify(window.DGIMCFDesk.observation(pr.read)) });
+			this.alert(__("MCF {0} propose (etat : {1}). Un responsable fiscal doit maintenant le valider (DGI MCF Device > Valider ce MCF).", [esc(r.nid), esc(__(r.status))]), "success");
+			this.probe.status = await window.DGIMCFDesk.load_status({ nid: r.nid });
+			this.render_probe();
+		} catch (e) {
+			this.alert(esc((e && e.message) || e), "danger");
+		}
 	}
 
 	// ------------------------------------------------------------------ enrolment
@@ -519,6 +674,7 @@ class DGIStationPage {
 			exported_at: new Date().toISOString(), version: this.M.VERSION, user: frappe.session.user,
 			station: this.gw ? { id: this.gw.name, point_of_sale: this.gw.point_of_sale, nid: this.gw.mcf_device, status: this.gw.status } : null,
 			browser: this.M.hostInfo(), state: st, device_status: this.device_status || null,
+			probe: this.probe && this.probe.read ? { st: this.probe.read.st, srv: this.probe.read.srv, port: this.probe.read.port } : null,
 			log: this.logs, frames: this.frames,
 			notice: "Contient les trames echangees avec le MCF (dont les lignes de factures). A transmettre uniquement au support.",
 		};

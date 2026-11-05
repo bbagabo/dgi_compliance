@@ -184,3 +184,43 @@ def desk_search_state():
                                      "events": frappe.db.count("DGI Gateway Event", {"event_code": "MCF_PROPOSE",
                                                                                      "mcf_device": NID_S})},
                                     indent=None))
+
+
+# ---------------------------------------------------------------- v5.3.2 : statut du MCF (tests/js/e2e_statut_mcf.js)
+PVF_T, NID_T = "E2E STATUT", "STE0000001"
+
+
+def prepare_statut():
+    """An MCF already validated (Actif) for a point de vente WITHOUT any poste - the situation of 05/11/2026."""
+    frappe.set_user("Administrator")
+    if not frappe.conf.get("allow_tests"):
+        frappe.throw("allow_tests requis")
+    prepare_desk_search()                              # the fiscal manager and the cashier
+    if not frappe.db.exists("DGI Point of Sale", PVF_T):
+        frappe.get_doc({"doctype": "DGI Point of Sale", "pos_name": PVF_T, "company": fx.COMPANY, "is_active": 1,
+                        "is_sales_location": 0, "nid_requirement": "Optional", "token_requirement": "Optional",
+                        "pos_address": "Avenue Bobozo", "pos_city": "Kinshasa"}).insert()
+    for g in frappe.get_all("DGI Gateway", filters={"point_of_sale": PVF_T}, pluck="name"):
+        frappe.db.delete("DGI Gateway", g)
+    frappe.db.set_value("DGI Point of Sale", PVF_T, "mcf_device", None)
+    if frappe.db.exists("DGI MCF Device", NID_T):
+        frappe.db.delete("DGI MCF Device", NID_T)
+    dev = frappe.get_doc({"doctype": "DGI MCF Device", "nid": NID_T, "status": "Actif", "point_of_sale": PVF_T,
+                          "last_mid": NID_T + "-1", "validated_mid": NID_T + "-1", "nif": "A0700190Q",
+                          "validated_by": "Administrator"})
+    dev.flags.dgi_registration = True
+    dev.insert(ignore_permissions=True)
+    frappe.db.set_value("DGI Point of Sale", PVF_T, "mcf_device", NID_T)
+    frappe.db.commit()
+    print("READY=" + PVF_T)
+
+
+def statut_state():
+    dev = frappe.db.get_value("DGI MCF Device", NID_T, ["status", "connection_status", "last_test_by", "last_test_origin",
+                                                       "test_dgi_state", "test_dgi_unsent", "last_connectivity_result"],
+                              as_dict=True) or {}
+    print("STATE=" + frappe.as_json({
+        "device": dev, "stations": frappe.get_all("DGI Gateway", filters={"point_of_sale": PVF_T},
+                                                  fields=["name", "kind", "status"]),
+        "tests": frappe.db.count("DGI Gateway Event", {"event_code": "TEST_CONNECTIVITE", "mcf_device": NID_T}),
+    }, indent=None))

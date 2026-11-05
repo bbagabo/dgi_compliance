@@ -221,7 +221,7 @@
   },
   {
    "fieldname": "sb_api",
-   "label": "Statut & Synchro",
+   "label": "Statut & Synchro e-MCF",
    "fieldtype": "Section Break"
   },
   {
@@ -252,6 +252,17 @@
    "fieldtype": "Select",
    "options": "Manual\nAPI",
    "default": "Manual"
+  },
+  {
+   "fieldname": "sb_mcf_status",
+   "fieldtype": "Section Break",
+   "label": "Statut MCF",
+   "depends_on": "eval:doc.mcf_device"
+  },
+  {
+   "fieldname": "mcf_status_html",
+   "fieldtype": "HTML",
+   "label": "Statut MCF"
   },
   {
    "fieldname": "sb_notes",

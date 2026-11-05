@@ -73,9 +73,100 @@
    "read_only": 1
   },
   {
+   "fieldname": "sb_conn",
+   "fieldtype": "Section Break",
+   "label": "Statut MCF (connexion)"
+  },
+  {
+   "fieldname": "status_html",
+   "fieldtype": "HTML",
+   "label": "Statut MCF"
+  },
+  {
+   "fieldname": "connection_status",
+   "fieldtype": "Select",
+   "label": "Resultat du dernier test",
+   "options": "Non teste\nOK\nAvertissement\nEcart\nEchec",
+   "default": "Non teste",
+   "read_only": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "description": "Test sans effet fiscal (C1h + C2h) depuis le navigateur du PC ou le MCF est branche : fiche MCF, point de vente, page Poste MCF ou Rechercher un MCF."
+  },
+  {
+   "fieldname": "last_connectivity_test",
+   "fieldtype": "Datetime",
+   "label": "Dernier test de connexion",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_test_by",
+   "fieldtype": "Link",
+   "label": "Teste par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_test_origin",
+   "fieldtype": "Data",
+   "label": "Teste depuis",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_conn",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "test_dgi_state",
+   "fieldtype": "Data",
+   "label": "Connexion du MCF a la DGI au test (C2h)",
+   "read_only": 1,
+   "description": "DIS non connecte au reseau, CON connecte, TRA envoi en cours, RES redemarrage."
+  },
+  {
+   "fieldname": "test_dgi_last_sync",
+   "fieldtype": "Datetime",
+   "label": "Derniere connexion reussie a la DGI (au test)",
+   "read_only": 1,
+   "description": "Heure ERPNext, calculee a partir de l'horloge du MCF (C2h DT)."
+  },
+  {
+   "fieldname": "test_dgi_unsent",
+   "fieldtype": "Data",
+   "label": "Transactions non envoyees a la DGI (au test)",
+   "read_only": 1,
+   "description": "C2h : transactions disponibles dans le MCF (DC) moins transactions envoyees (EC). Vide si la valeur n'a pas pu etre lue."
+  },
+  {
+   "fieldname": "test_clock_offset_s",
+   "fieldtype": "Data",
+   "label": "Ecart d'horloge MCF / PC (s)",
+   "read_only": 1,
+   "description": "Vide si la valeur n'a pas pu etre lue."
+  },
+  {
+   "fieldname": "sb_conn_detail",
+   "fieldtype": "Section Break",
+   "label": "Detail du dernier test",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "last_connectivity_result",
+   "fieldtype": "Small Text",
+   "label": "Resultat du test de connexion",
+   "read_only": 1
+  },
+  {
+   "fieldname": "connection_test_details",
+   "fieldtype": "Code",
+   "label": "Controles et valeurs lues (JSON)",
+   "options": "JSON",
+   "read_only": 1
+  },
+  {
    "fieldname": "sb_state",
    "fieldtype": "Section Break",
-   "label": "Etat (dernier heartbeat)",
+   "label": "Etat envoye par le poste MCF (dernier heartbeat)",
    "collapsible": 0
   },
   {
@@ -129,7 +220,8 @@
    "fieldname": "dgi_pending",
    "fieldtype": "Int",
    "label": "Transactions en attente d'envoi a la DGI",
-   "read_only": 1
+   "read_only": 1,
+   "description": "C2h : DC - EC (v5.3.2). Une passerelle plus ancienne envoie DC seul."
   },
   {
    "fieldname": "sync_alert",
@@ -237,18 +329,6 @@
    "fieldname": "accepted_differences",
    "fieldtype": "Small Text",
    "label": "Ecarts acceptes a la validation",
-   "read_only": 1
-  },
-  {
-   "fieldname": "last_connectivity_test",
-   "fieldtype": "Datetime",
-   "label": "Dernier test de connexion",
-   "read_only": 1
-  },
-  {
-   "fieldname": "last_connectivity_result",
-   "fieldtype": "Small Text",
-   "label": "Resultat du test de connexion",
    "read_only": 1
   }
  ],

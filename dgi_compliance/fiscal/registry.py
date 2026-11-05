@@ -209,7 +209,9 @@ def record_connectivity(nid: str, result: dict, gateway: str | None, by: str) ->
     ok = bool((result or {}).get("ok"))
     text = (str((result or {}).get("summary") or "") or (_("OK") if ok else _("echec")))[:1000]
     frappe.db.set_value(DEVICE, nid, {"last_connectivity_test": now_datetime(),
-                                      "last_connectivity_result": f"{'OK' if ok else 'ECHEC'} - {text}"},
+                                      "last_connectivity_result": f"{'OK' if ok else 'ECHEC'} - {text}",
+                                      "connection_status": "OK" if ok else "Echec", "last_test_by": by,
+                                      "last_test_origin": (_("Poste {0}").format(gateway) if gateway else None)},
                         update_modified=False)
     log_event(gateway, "TEST_CONNECTIVITE", _("Test sans effet fiscal du MCF {0} par {1} : {2}").format(nid, by, text),
               level="Info" if ok else "Alerte", device=nid, details=result)

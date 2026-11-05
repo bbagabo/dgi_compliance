@@ -30,14 +30,25 @@ frappe.ui.form.on("DGI Point of Sale", {
             frappe.new_doc("DGI Channel Switch", { point_of_sale: frm.doc.name });
         }, __("Canal"));
         if (frm.doc.mcf_device) {
+            // v5.3.2: "Statut MCF" block (like "Statut & Synchro" of the e-MCF) and a connection test from this PC
+            dgi_pvf_mcf_status(frm);
+            if (frappe.user.has_role(["DGI Caisse MCF", "DGI Fiscal Manager", "System Manager"])) {
+                frm.add_custom_button(__("Tester la connexion (sur ce PC)"), () => frappe.require(
+                    ["/assets/dgi_compliance/js/dgi_mcf.js", "/assets/dgi_compliance/js/dgi_mcf_desk.js"],
+                    () => DGIMCFDesk.test({ nid: frm.doc.mcf_device, origin: __("Point de vente {0}", [frm.doc.name]), stay: true,
+                        on_done: () => dgi_pvf_mcf_status(frm) })), __("MCF"));
+            }
             frm.add_custom_button(__("Etat du MCF"), () => frappe.call({
                 method: "dgi_compliance.fiscal.api.device_status", args: { point_of_sale: frm.doc.name },
                 callback: (r) => {
                     const m = r.message || {};
-                    frappe.msgprint({ title: __("MCF {0}", [m.nid || ""]), indicator: m.gateway_online ? "green" : "red",
-                        message: `<table class="table table-bordered">${Object.entries(m).map(([k, v]) =>
-                            `<tr><td>${frappe.utils.escape_html(k)}</td><td>${frappe.utils.escape_html(String(v ?? ""))}</td></tr>`).join("")}</table>` });
+                    frappe.require(["/assets/dgi_compliance/js/dgi_mcf_desk.js"], () => DGIMCFDesk.load_status({ point_of_sale: frm.doc.name })
+                        .then((s) => frappe.msgprint({ title: __("MCF {0}", [m.nid || ""]), indicator: s.indicator || "gray", wide: true,
+                            message: DGIMCFDesk.status_html(s) + `<p class="text-muted small" style="margin-top:8px">${frappe.utils.escape_html(
+                                __("Operations en cours sur ce MCF : {0} - transactions non envoyees a la DGI (dernier heartbeat) : {1}",
+                                    [m.operations_en_cours || 0, m.transactions_en_attente_dgi ?? "-"]))}</p>` })));
                 } }), __("MCF"));
+            frm.add_custom_button(__("Ouvrir la page Poste MCF"), () => frappe.set_route("dgi-mcf-station"), __("MCF"));
             frm.add_custom_button(__("Relancer la synchronisation DGI (C2h RESTART)"), () => frappe.confirm(
                 __("Le MCF va redemarrer pour relancer sa synchronisation avec la DGI. Continuer ?"),
                 () => frappe.call({ method: "dgi_compliance.fiscal.api.request_resync", args: { point_of_sale: frm.doc.name },
@@ -75,3 +86,14 @@ frappe.ui.form.on("DGI Point of Sale", {
         }
     },
 });
+
+// v5.3.2: consolidated state of the MCF of this point de vente (no call to the MCF itself)
+function dgi_pvf_mcf_status(frm) {
+    const f = frm.fields_dict.mcf_status_html;
+    if (!f || !frm.doc.mcf_device) return;
+    frappe.require(["/assets/dgi_compliance/js/dgi_mcf_desk.js"], () => {
+        DGIMCFDesk.load_status({ point_of_sale: frm.doc.name })
+            .then((s) => f.$wrapper.html(DGIMCFDesk.status_html(s)))
+            .catch(() => f.$wrapper.html(""));
+    });
+}

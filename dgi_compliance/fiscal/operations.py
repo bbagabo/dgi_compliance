@@ -425,7 +425,12 @@ def record_heartbeat(gw, snapshot: dict) -> dict:
             if last:
                 values["dgi_last_sync"] = last
         if snapshot.get("dgi_pending") not in (None, ""):
-            values["dgi_pending"] = cint(snapshot.get("dgi_pending"))
+            # C2h: EC = transactions sent, DC = transactions available in the MCF -> not sent = DC - EC
+            # (v5.3.2; older gateways send only DC, kept as before)
+            available = cint(snapshot.get("dgi_pending"))
+            if snapshot.get("dgi_sent") not in (None, ""):
+                available = max(0, available - cint(snapshot.get("dgi_sent")))
+            values["dgi_pending"] = available
         if snapshot.get("flags") is not None:
             values["status_flags"] = ", ".join(snapshot.get("flags") or [])
         if isinstance(snapshot.get("tax_rates"), dict) and snapshot["tax_rates"]:

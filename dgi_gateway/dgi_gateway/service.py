@@ -120,7 +120,8 @@ class GatewayService:
                              "last_invoice": st["dfn"], "last_sig": st["dfs"], "tax_rates": st.get("tax_rates") or {},
                              "flags": st["flags"], "invoice_open": st["invoice_open"],
                              "device_time": st["dt"], "dgi_last_sync": srv["last_sync"],
-                             "dgi_pending": srv["pending"], "dgi_state": srv["state"], "port": self.dev.port})
+                             "dgi_pending": srv["pending"], "dgi_sent": srv["sent"], "dgi_state": srv["state"],
+                             "port": self.dev.port})
             except LinkError as e:
                 snap["device_error"] = str(e)
                 self.drop_device()

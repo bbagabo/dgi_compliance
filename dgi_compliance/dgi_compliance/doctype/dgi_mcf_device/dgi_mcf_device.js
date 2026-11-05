@@ -1,9 +1,18 @@
 // DGI MCF Device - v5.3.0 : validation explicite d'un MCF detecte (livrable B section 7)
+// v5.3.2 : bloc "Statut MCF" et "Tester la connexion (sur ce PC)" (C1h + C2h, sans effet fiscal)
 frappe.ui.form.on("DGI MCF Device", {
     refresh(frm) {
         if (frm.is_new()) return;
         const colors = { Detecte: "orange", Declare: "orange", Actif: "green", "A revalider": "red", Suspendu: "gray", Retire: "gray" };
         frm.page.set_indicator(__(frm.doc.status), colors[frm.doc.status] || "gray");
+        dgi_mcf_status_block(frm);
+        if (frappe.user.has_role(["DGI Caisse MCF", "DGI Fiscal Manager", "System Manager"])) {
+            frm.add_custom_button(__("Tester la connexion (sur ce PC)"), () => frappe.require(
+                ["/assets/dgi_compliance/js/dgi_mcf.js", "/assets/dgi_compliance/js/dgi_mcf_desk.js"],
+                () => DGIMCFDesk.test({ nid: frm.doc.name, origin: __("Fiche MCF"), stay: true,
+                    on_done: () => frm.reload_doc() })));
+        }
+        frm.add_custom_button(__("Ouvrir la page Poste MCF"), () => frappe.set_route("dgi-mcf-station"), __("Poste"));
         if (!["Detecte", "Declare", "A revalider"].includes(frm.doc.status)) return;
         if (!frappe.user.has_role(["DGI Fiscal Manager", "System Manager"])) return;
         frm.add_custom_button(__("Valider ce MCF"), () => validate_dialog(frm), __("Validation"));
@@ -17,6 +26,23 @@ frappe.ui.form.on("DGI MCF Device", {
         }
     },
 });
+
+// v5.3.2: consolidated state (last test, poste, DGI connection) in the HTML field status_html
+function dgi_mcf_status_block(frm) {
+    const $w = frm.fields_dict.status_html && frm.fields_dict.status_html.$wrapper;
+    if (!$w) return;
+    $w.html(`<div class="text-muted small">${__("Chargement du statut...")}</div>`);
+    frappe.require(["/assets/dgi_compliance/js/dgi_mcf_desk.js"], () => {
+        DGIMCFDesk.load_status({ nid: frm.doc.name }).then((s) => {
+            $w.html(DGIMCFDesk.status_html(s));
+            if (s.can_create_station) {
+                frm.add_custom_button(__("Creer le poste MCF de {0}", [s.point_of_sale]), () => frappe.xcall(
+                    "dgi_compliance.fiscal.mcf_status.create_station", { point_of_sale: s.point_of_sale })
+                    .then((r) => frappe.set_route("Form", "DGI Gateway", r.name)), __("Poste"));
+            }
+        }).catch(() => $w.html(""));
+    });
+}
 
 function validate_dialog(frm) {
     const esc = frappe.utils.escape_html;

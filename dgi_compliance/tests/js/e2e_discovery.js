@@ -100,9 +100,12 @@ const FAKE_SERIAL = () => {
 	await page.click(".dgi-st-connect");
 	await page.waitForSelector(".dgi-st-device table", { timeout: 15000 });
 	await page.click(".dgi-st-test");
-	await page.waitForFunction(() => /C1h OK/.test(document.querySelector(".dgi-st-alert").innerText), null, { timeout: 15000 });
+	// v5.3.2: the comparisons are made by ERPNext (fiscal.mcf_status.record_desk_test) and shown in the page
+	await page.waitForFunction(() => /Test de connexion du MCF/.test(document.querySelector(".dgi-st-alert").innerText), null, { timeout: 15000 });
+	const shown = await page.textContent(".dgi-st-alert");
+	check(/Reponse du MCF/.test(shown) && /NIF/.test(shown) && /MID/.test(shown), "test de connexion : controles affiches (reponse, NIF, MID...)");
 	s = state();
-	check(/^OK - C1h OK/.test(s.device.last_connectivity_result || ""), `test de connexion enregistre (${s.device.last_connectivity_result})`);
+	check(/^(OK|Avertissement) - /.test(s.device.last_connectivity_result || ""), `test de connexion enregistre (${(s.device.last_connectivity_result || "").slice(0, 80)})`);
 	await page.screenshot({ path: process.env.SHOT || "/tmp/decouverte_mcf.png", fullPage: true });
 	await browser.close();
 	py.kill();

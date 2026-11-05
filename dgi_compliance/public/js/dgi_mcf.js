@@ -27,7 +27,7 @@
 })(typeof self !== "undefined" ? self : globalThis, function () {
 	"use strict";
 
-	const VERSION = "web-0.2.0";
+	const VERSION = "web-0.2.1";
 
 	// ======================================================================= protocol (protocol.py)
 	const SOH = 0x01, ETX = 0x03, BRK = 0x04, AMB = 0x05, NAK = 0x15, SYN = 0x16;
@@ -925,7 +925,7 @@
 					this.lastStatus = st;
 					Object.assign(snap, { mid: st.mid, nid: st.nid, nif: st.nif, tc: st.tc, last_invoice: st.dfn, last_sig: st.dfs,
 						tax_rates: st.tax_rates, flags: st.flags, invoice_open: st.invoice_open, device_time: st.dt,
-						dgi_last_sync: srv.last_sync, dgi_pending: srv.pending, dgi_state: srv.state, port: this.dev.port });
+						dgi_last_sync: srv.last_sync, dgi_pending: srv.pending, dgi_sent: srv.sent, dgi_state: srv.state, port: this.dev.port });
 				} catch (e) {
 					if (!(e instanceof LinkError)) throw e;
 					snap.device_error = e.message;
