@@ -84,7 +84,8 @@ Branche `feature/HL2-v5.4.0-deux-utilisateurs-ref-pdv`, 9 novembre 2026, à part
 |---|---|
 | `test_sequence_pdv` (nouveau, Q01 à Q18) | 18/18 |
 | `test_deux_utilisateurs` (nouveau, U01 à U09) | 9/9 |
-| Suite complète de l'application | 166/166 |
-| Mise à jour d'un site v5.3.2 avec données (`migrate`) | OK, 42 factures historiques non renumérotées |
+| Suite complète de l'application, site mis à jour depuis v5.3.2 | 166/166 |
+| Suite complète sur un site neuf (`install-app`) | 166/166 |
+| Mise à jour d'un site v5.3.2 avec données (`migrate`) | OK : 10 codes de séquence proposés, 42 factures historiques non renumérotées |
 | `dgi_mcf.js` (node) / `dgi_gateway` (pytest) | 15/15 / 48/48 |
 | Navigateur réel : approbation par la caissière-approbatrice, champ sur la facture, impression | OK |
