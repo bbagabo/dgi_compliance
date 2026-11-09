@@ -96,6 +96,14 @@ def _point_of_sale_name(doc, settings):
     return (active[0] if len(active) == 1 else None), nim
 
 
+def _sequence_label(settings):
+    from dgi_compliance.fiscal.sequence import label
+    try:
+        return label(settings)
+    except Exception:
+        return "Réf. PDV"
+
+
 def pos_block(doc, settings):
     """Point de vente (modele DGI): code magasin, adresse, ville, reference NID."""
     pos_name, nim = _point_of_sale_name(doc, settings)
@@ -300,6 +308,7 @@ def security_block(doc):
         "datetime": doc.get("custom_dgi_datetime") or "",
         "qr_image": doc.get("custom_dgi_qr_image") or "",
         "qr_code": doc.get("custom_dgi_qr_code") or "",
+        "channel": doc.get("custom_dgi_channel") or "e-MCF",
     }
 
 
@@ -375,6 +384,9 @@ def dgi_invoice_context(doc):
         "client": client,
         "general": {
             "number": doc.name,
+            # v5.4.0: secondary reference of the point de vente, printed under the number (fiscal.sequence)
+            "sequence_ref": (doc.get("dgi_sequence_ref") or "") if doc.get("custom_dgi_code_def") else "",
+            "sequence_label": _sequence_label(settings),
             "orders": _sales_orders(doc),
             "date": formatdate(doc.get("posting_date")),
             "time": posting_time,

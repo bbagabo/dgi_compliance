@@ -308,6 +308,9 @@ def apply_to_invoice(op, data):
     }, update_modified=False)
     log_exchange("mcf-normalize", {"operation": op.name, "gateway": op.gateway}, data,
                  reference_invoice=op.sales_invoice)
+    # v5.4.0: sequential reference of the point de vente, given as soon as the result is committed
+    from dgi_compliance.fiscal.sequence import assign_when_committed
+    assign_when_committed(op.sales_invoice, source="MCF", operation=op.name)
 
 
 def _invoice_error(op, message):

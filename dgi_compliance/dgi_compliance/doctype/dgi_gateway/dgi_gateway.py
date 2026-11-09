@@ -188,35 +188,43 @@ def _ensure_user(gw) -> str:
 
 @frappe.whitelist(methods=["POST"])
 def approve_gateway(gateway: str, fingerprint: str | None = None) -> dict:
-    frappe.only_for(MANAGERS)
-    from frappe.utils import cint
-    from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
+    """v5.4.0: a DGI Fiscal Manager OR a DGI Approbateur approves, never the person who enrolled the poste
+    (two-person rule), never a technical account (fiscal.approvals)."""
+    from dgi_compliance.fiscal import approvals as A
+    role = A.require_approver(_("Approbation du poste"))
     gw = frappe.get_doc("DGI Gateway", gateway)
     if gw.status != "A approuver":
         frappe.throw(_("Seule une passerelle 'A approuver' peut etre approuvee."))
+    if gw.api_user and gw.api_user == frappe.session.user:
+        frappe.throw(_("Le compte technique d'une passerelle ne peut pas approuver."), frappe.PermissionError)
     typed = (fingerprint or "").strip().upper().replace(" ", "")
     if not typed or not hmac.compare_digest(typed, (gw.key_fingerprint or "").upper()):
         log_event(gw.name, "APPROBATION_REFUSEE", _("Empreinte saisie par {0} differente de la cle recue.")
                   .format(frappe.session.user), level="Alerte")
         frappe.throw(_("L'empreinte saisie ne correspond pas a la cle recue : n'approuvez pas ce poste."))
-    two_people = get_settings().get("station_approval_two_people")
-    if gw.get("enrolled_by") and gw.enrolled_by == frappe.session.user and cint(1 if two_people is None else two_people):
-        frappe.throw(_("Regle des deux personnes : ce poste a ete enrole par vous ; un autre DGI Fiscal Manager "
-                       "doit l'approuver."))
+    mode = A.check_two_people(gw.get("enrolled_by"), A.RULE_STATION, _("l'enrolement du poste {0}").format(gw.name),
+                              reference=gw.name, gateway=gw.name)
     for other in frappe.get_all("DGI Gateway", filters={"mcf_device": gw.mcf_device, "status": "Active",
                                                         "name": ["!=", gw.name]}, pluck="name"):
-        revoke_gateway(other, _("Remplacee par {0}").format(gw.name))
+        _revoke(other, _("Remplacee par {0}").format(gw.name))
     gw.api_user = _ensure_user(gw)
     gw.status, gw.approved_by, gw.approved_on = "Active", frappe.session.user, now_datetime()
     _action_save(gw)
-    log_event(gw.name, "APPROUVEE", _("Passerelle approuvee par {0} (empreinte {1}).")
-              .format(frappe.session.user, gw.key_fingerprint))
+    log_event(gw.name, "APPROUVEE", _("Passerelle approuvee par {0} (empreinte {1} ; {2} ; enrolee par {3}).")
+              .format(frappe.session.user, gw.key_fingerprint, A.approval_note(role, mode), gw.get("enrolled_by") or "-"),
+              details={"approved_by": frappe.session.user, "role": role, "mode": mode,
+                       "enrolled_by": gw.get("enrolled_by"), "code_issued_by": gw.get("code_issued_by")})
     return {"status": gw.status}
 
 
 @frappe.whitelist(methods=["POST"])
 def revoke_gateway(gateway: str, reason: str | None = None) -> dict:
     frappe.only_for(MANAGERS)
+    return _revoke(gateway, reason)
+
+
+def _revoke(gateway: str, reason: str | None = None) -> dict:
+    """Revocation itself (also used when an approved poste replaces another one for the same MCF)."""
     gw = frappe.get_doc("DGI Gateway", gateway)
     if gw.api_user:
         frappe.db.set_value("User", gw.api_user, "enabled", 0)

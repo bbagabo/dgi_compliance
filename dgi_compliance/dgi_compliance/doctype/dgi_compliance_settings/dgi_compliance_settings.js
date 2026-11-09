@@ -17,6 +17,20 @@ frappe.ui.form.on("DGI Compliance Settings", {
         frm.add_custom_button(__("Statut des MCF"), () => frappe.set_route("List", "DGI MCF Device"), __("MCF"));
         frm.add_custom_button(__("Poste MCF"), () => frappe.set_route("dgi-mcf-station"), __("MCF"));
         frm.add_custom_button(__("Journal des transmissions"), () => frappe.set_route("List", "DGI Fiscal Operation"), __("MCF"));
+        // v5.4.0: who initiates / who approves, and whether two distinct persons exist for each control
+        frm.add_custom_button(__("Controler la separation des taches"), () => frappe.call({
+            method: "dgi_compliance.fiscal.approvals.separation_report", callback: (r) => {
+                const m = r.message || {};
+                const esc = frappe.utils.escape_html;
+                const rows = (m.controls || []).map((c) => `<tr class="${c.ok ? "" : "danger"}"><td>${esc(c.action)}</td>
+                    <td>${c.rule_on ? __("Oui") : __("Non (auto-approbation journalisee)")}</td>
+                    <td>${esc((c.initiators || []).join(", ") || "-")}</td><td>${esc((c.approvers || []).join(", ") || "-")}</td>
+                    <td>${c.ok ? "OK" : __("Impossible : une seule personne")}</td></tr>`).join("");
+                frappe.msgprint({ title: __("Separation des taches"), wide: true, indicator: m.ok ? "green" : "red",
+                    message: `<table class="table table-bordered table-condensed"><thead><tr><th>${__("Action")}</th><th>${__("Deux personnes")}</th>
+                        <th>${__("Initie par")}</th><th>${__("Approuve par (DGI Fiscal Manager / DGI Approbateur)")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+                        <p class="text-muted">${__("Comptes techniques (passerelles, agent MCF), jamais approbateurs ni comptes comme personnes : {0}", [esc((m.technical_accounts || []).join(", ") || "-")])}</p>` });
+            } }), __("MCF"));
         const grp = __("DGI");
 
         const run = (method, args, freezeMsg, done) => {

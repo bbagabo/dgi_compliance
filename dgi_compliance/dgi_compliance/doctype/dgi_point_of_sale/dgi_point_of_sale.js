@@ -29,6 +29,22 @@ frappe.ui.form.on("DGI Point of Sale", {
         frm.add_custom_button(__("Changer de canal"), () => {
             frappe.new_doc("DGI Channel Switch", { point_of_sale: frm.doc.name });
         }, __("Canal"));
+        // v5.4.0: reference sequentielle (Ref. PDV) of this point de vente
+        if (frm.doc.sequence_code) {
+            frm.add_custom_button(__("Registre des references"), () => frappe.set_route("List", "DGI Sequence Entry",
+                { point_of_sale: frm.doc.name }), __("Reference"));
+            frm.add_custom_button(__("Controler la serie"), () => frappe.prompt(
+                { fieldname: "year", fieldtype: "Int", label: __("Annee"), reqd: 1, default: new Date().getFullYear() },
+                (v) => frappe.call({ method: "dgi_compliance.fiscal.sequence.check_sequence",
+                    args: { point_of_sale: frm.doc.name, year: v.year }, callback: (r) => {
+                        const m = r.message || {};
+                        const esc = frappe.utils.escape_html;
+                        frappe.msgprint({ title: __("Serie {0}-{1}", [esc(m.code || ""), m.year]), indicator: m.ok ? "green" : "red",
+                            message: `<p>${__("{0} reference(s), de {1} a {2} ; compteur : {3}.", [m.count || 0, esc(m.first || "-"), esc(m.last || "-"), m.counter || 0])}</p>
+                                <p>${m.ok ? __("Serie continue, sans doublon, identique aux factures.")
+                                    : __("Trous : {0} - doublons : {1} - differences avec la facture : {2}", [esc((m.gaps || []).join(", ") || "-"), esc((m.duplicates || []).join(", ") || "-"), esc((m.mismatches || []).join(", ") || "-")])}</p>` });
+                    } }), __("Controler la serie"), __("Controler")), __("Reference"));
+        }
         if (frm.doc.mcf_device) {
             // v5.3.2: "Statut MCF" block (like "Statut & Synchro" of the e-MCF) and a connection test from this PC
             dgi_pvf_mcf_status(frm);

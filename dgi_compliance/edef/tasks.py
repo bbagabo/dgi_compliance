@@ -48,7 +48,8 @@ FISCAL_FIELDS = (
     "dgi_point_of_sale", "custom_dgi_channel", "custom_dgi_operation",
 )
 _RESULT_FIELDS = ("custom_dgi_uid", "custom_dgi_code_def", "custom_dgi_counters", "custom_dgi_nim",
-                  "custom_dgi_datetime", "custom_dgi_qr_code", "custom_dgi_qr_image")
+                  "custom_dgi_datetime", "custom_dgi_qr_code", "custom_dgi_qr_image",
+                  "dgi_sequence_ref")     # v5.4.0: reference sequentielle (fiscal.sequence), written by the SFE
 
 
 def _commit():
@@ -344,10 +345,12 @@ def on_sales_invoice_trash(doc, method=None):
 
 
 def protect_fiscal_fields(doc, method=None):
-    """`before_update_after_submit`: the security elements cannot be edited by hand / API."""
+    """`before_update_after_submit`: the security elements cannot be edited by hand / API.
+    v5.4.0: the sequential reference is owned by the SFE: the stored value is kept whatever is sent."""
     before = doc.get_doc_before_save()
     if not before:
         return
+    doc.set("dgi_sequence_ref", before.get("dgi_sequence_ref"))
     changed = [f for f in FISCAL_FIELDS if (doc.get(f) or None) != (before.get(f) or None)]
     if changed:
         frappe.throw(_("Champs fiscaux DGI non modifiables: {0}.").format(", ".join(changed)),
@@ -690,6 +693,9 @@ def _normalize_emcf(doc, settings):
         "custom_dgi_response": json.dumps({"request": dto, "invoice": resp, "confirm": cdata},
                                           ensure_ascii=False, default=str),
     })
+    # v5.4.0: sequential reference of the point de vente, given as soon as the security elements are committed
+    from dgi_compliance.fiscal.sequence import assign_when_committed
+    assign_when_committed(doc.name, source="e-MCF", operation=doc.get("custom_dgi_operation"), doc=doc)
     _commit()
 
     total_diff = total - abs(flt(doc.base_grand_total))

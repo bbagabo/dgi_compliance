@@ -214,3 +214,12 @@ def dgi_tax_summary(doc):
         g["rate"] = rate
         g["vat"] = flt(g["base"] * rate / 100.0)
     return [groups[k] for k in sorted(groups)]
+
+
+def dgi_sequence_label(*args, **kwargs):
+    """v5.4.0: printed label of the sequential reference (DGI Compliance Settings, default "Réf. PDV")."""
+    from dgi_compliance.fiscal.sequence import label
+    try:
+        return label()
+    except Exception:
+        return "Réf. PDV"

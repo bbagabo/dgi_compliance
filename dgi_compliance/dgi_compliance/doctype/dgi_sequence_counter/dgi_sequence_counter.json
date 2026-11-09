@@ -1,0 +1,115 @@
+{
+ "doctype": "DocType",
+ "name": "DGI Sequence Counter",
+ "module": "DGI Compliance",
+ "custom": 0,
+ "engine": "InnoDB",
+ "autoname": "field:counter_key",
+ "in_create": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "description": "Compteur de la reference sequentielle (Ref. PDV) par code et par annee (v5.4.0). Ecrit uniquement par l'attribution, sous verrou ; jamais modifiable a la main.",
+ "fields": [
+  {
+   "fieldname": "counter_key",
+   "fieldtype": "Data",
+   "label": "Cle (code-annee)",
+   "unique": 1,
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sequence_code",
+   "fieldtype": "Data",
+   "label": "Code de sequence",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "year",
+   "fieldtype": "Int",
+   "label": "Annee",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "scope",
+   "fieldtype": "Data",
+   "label": "Portee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "point_of_sale",
+   "fieldtype": "Link",
+   "options": "DGI Point of Sale",
+   "label": "Point de vente fiscal",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Societe",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_number",
+   "fieldtype": "Int",
+   "label": "Dernier numero attribue",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_reference",
+   "fieldtype": "Data",
+   "label": "Derniere reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_invoice",
+   "fieldtype": "Link",
+   "options": "Sales Invoice",
+   "label": "Derniere facture",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_assigned_on",
+   "fieldtype": "Datetime",
+   "label": "Derniere attribution",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Approbateur",
+   "read": 1,
+   "report": 1
+  }
+ ]
+}

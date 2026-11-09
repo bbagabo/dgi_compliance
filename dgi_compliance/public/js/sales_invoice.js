@@ -69,6 +69,14 @@ frappe.ui.form.on("Sales Invoice", {
             }, __("DGI"));
         }
 
+        // --- v5.4.0: normalized invoice without its sequential reference (attribution rolled back) ---
+        if (frm.doc.custom_dgi_status === "Normalized" && frm.doc.custom_dgi_code_def && !frm.doc.dgi_sequence_ref
+                && frm.doc.docstatus < 2 && frappe.user.has_role(["DGI Fiscal Manager", "System Manager"])) {
+            frm.add_custom_button(__("Attribuer la reference sequentielle"), () => frappe.call({
+                method: "dgi_compliance.fiscal.sequence.assign_now", args: { invoice: frm.doc.name },
+                freeze: true, callback: () => frm.reload_doc() }), __("DGI"));
+        }
+
         // --- Uncertain confirmation: release after checking the DGI portal (System Manager) ---
         if (frm.doc.docstatus === 0 && (frm.doc.custom_dgi_error || "").startsWith("CONFIRMATION INCERTAINE")
                 && frappe.user.has_role("System Manager")) {

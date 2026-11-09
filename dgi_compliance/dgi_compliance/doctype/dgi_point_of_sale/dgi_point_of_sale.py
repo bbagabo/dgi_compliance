@@ -5,7 +5,8 @@ from frappe.utils import cint, now_datetime
 
 IN_FLIGHT = ("Queued", "Leased", "Uncertain", "Checking", "Dispute", "Pending")
 FISCAL_ROLES = ("System Manager", "DGI Fiscal Manager")
-RESTRICTED = ("primary_channel", "priority_reason", "fallback_policy", "branch", "mcf_device", "nim", "company")
+RESTRICTED = ("primary_channel", "priority_reason", "fallback_policy", "branch", "mcf_device", "nim", "company",
+              "sequence_code")
 
 
 class DGIPointofSale(Document):
@@ -26,6 +27,22 @@ class DGIPointofSale(Document):
         self._validate_priority()
         self._validate_mcf_device()
         self._validate_matrix_a()
+        self._validate_sequence_code()
+
+    # ---- v5.4.0 : reference sequentielle (fiscal.sequence) ----
+    def _validate_sequence_code(self):
+        from dgi_compliance.fiscal import sequence as S
+        if not (self.sequence_code or "").strip():
+            self.sequence_code = S.suggest_code(self.pos_name or self.name, self.pos_code, exclude_pvf=self.name or "")
+        self.sequence_code = S.validate_code(self.sequence_code, _("Code de sequence (Ref. PDV)"))
+        other = S.code_in_use(self.sequence_code, exclude_pvf=self.name or "")
+        if other:
+            frappe.throw(_("Le code de sequence {0} est deja utilise ({1}).").format(self.sequence_code, other))
+        before = None if self.is_new() else self.get_doc_before_save()
+        old = before.get("sequence_code") if before else None
+        if old and old != self.sequence_code and old in S.used_codes(self.name):
+            frappe.throw(_("Le code de sequence {0} a deja servi a des references de {1} : il ne se modifie plus "
+                           "(la serie doit rester continue).").format(old, self.name))
 
     # ---- v5.3.0 ----
     def _check_rights(self):
@@ -93,6 +110,11 @@ class DGIPointofSale(Document):
             for gw in frappe.get_all("DGI Gateway", filters={"point_of_sale": self.name,
                                                              "status": ["in", ["Nouvelle", "Code emis"]]}, pluck="name"):
                 frappe.db.set_value("DGI Gateway", gw, "mcf_device", self.mcf_device, update_modified=False)
+        if before and before.get("sequence_code") and before.get("sequence_code") != self.sequence_code:
+            from dgi_compliance.gateway.events import log_event
+            log_event(None, "CODE_SEQUENCE", _("{0} : code de sequence {1} -> {2} par {3}.").format(
+                self.name, before.get("sequence_code"), self.sequence_code, frappe.session.user), level="Alerte",
+                point_of_sale=self.name)
         if before and (before.primary_channel or "") != (self.primary_channel or ""):
             from dgi_compliance.gateway.events import log_event
             log_event(None, "PRIORITE_MODIFIEE", _("{0} : canal prioritaire {1} -> {2} par {3} ({4}).").format(

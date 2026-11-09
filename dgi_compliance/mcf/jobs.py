@@ -87,6 +87,9 @@ def apply_mcf_result(job, data: dict) -> dict:
         "custom_dgi_qr_image": make_qr_data_uri(qr),
         "custom_dgi_error": None,
     }, update_modified=False)
+    # v5.4.0: sequential reference of the point de vente (v4 agent path)
+    from dgi_compliance.fiscal.sequence import assign_when_committed
+    assign_when_committed(doc.name, source="MCF (agent v4)", doc=doc)
 
     # Reconciliation machine vs ERPNext (CDF) - log a warning line, never undo a fiscalized invoice.
     try:

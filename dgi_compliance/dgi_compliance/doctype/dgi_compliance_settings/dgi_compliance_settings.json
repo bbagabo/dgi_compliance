@@ -273,7 +273,8 @@
    "label": "Bascule de canal : deux personnes",
    "fieldtype": "Check",
    "default": "1",
-   "description": "La bascule doit etre validee par un autre utilisateur que celui qui l'a demandee."
+   "description": "La bascule doit etre validee par une autre personne que celle qui l'a demandee (DGI Fiscal Manager ou DGI Approbateur). Modifiable par un System Manager seulement ; chaque changement est journalise (v5.4.0).",
+   "permlevel": 1
   },
   {
    "fieldname": "switch_requires_dgi_reference",
@@ -307,7 +308,9 @@
    "fieldname": "station_approval_two_people",
    "fieldtype": "Check",
    "label": "Poste MCF : approbation par une autre personne que celle qui l'a enrole",
-   "default": "1"
+   "default": "1",
+   "permlevel": 1,
+   "description": "Validation d'un MCF propose et approbation d'un Poste MCF par une autre personne que celle qui l'a propose / enrole (DGI Fiscal Manager ou DGI Approbateur, jamais un compte technique). Decocher seulement pour une entreprise a un seul utilisateur : chaque auto-approbation est alors journalisee (AUTO_APPROBATION). Modifiable par un System Manager seulement (v5.4.0)."
   },
   {
    "fieldname": "cb_mcf",
@@ -331,6 +334,52 @@
    "no_copy": 1,
    "hidden": 1,
    "description": "Obsolete depuis v5.1 (agent v4 remplace par les passerelles DGI Gateway)."
+  },
+  {
+   "fieldname": "sb_sequence",
+   "fieldtype": "Section Break",
+   "label": "Reference sequentielle par point de vente (v5.4.0)",
+   "description": "Reference secondaire imprimee sous le numero de facture, attribuee par le SFE quand la DGI renvoie les elements de securite (MCF ou e-MCF) : [code]-[annee]-[numero sur 6 chiffres], serie ininterrompue par annee (exigence SFE 1.15). Elle ne remplace ni le numero de facture ERPNext ni les compteurs DEF de la DGI (FC/TC, propres a chaque MCF / e-MCF). Aucun numero n'est consomme par un echec ou une nouvelle tentative."
+  },
+  {
+   "fieldname": "sequence_enabled",
+   "fieldtype": "Check",
+   "label": "Attribuer la reference sequentielle",
+   "default": "1"
+  },
+  {
+   "fieldname": "sequence_scope",
+   "fieldtype": "Select",
+   "label": "Une serie par",
+   "options": "Point de vente fiscal\nSociete",
+   "default": "Point de vente fiscal",
+   "description": "Point de vente fiscal : code de sequence du point de vente (continue meme en secours e-MCF / MCF). Societe : une seule serie par societe (code = abreviation de la societe). A choisir avant la mise en service : changer de portee commence de nouvelles series."
+  },
+  {
+   "fieldname": "sequence_print_label",
+   "fieldtype": "Data",
+   "label": "Libelle imprime",
+   "default": "Réf. PDV",
+   "description": "Imprime en petit sous le numero de facture. Evitez \"Ref. DGI\" : la reference est attribuee par le SFE, pas par la DGI (les elements DGI sont le Code DEF/DGI, le NIM/NID et les compteurs DEF)."
+  },
+  {
+   "fieldname": "cb_sequence",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sequence_default_code",
+   "fieldtype": "Data",
+   "label": "Code des factures sans point de vente fiscal",
+   "default": "SIEGE",
+   "description": "2 a 10 lettres majuscules ou chiffres. Utilise en mode sans point de vente fiscal."
+  },
+  {
+   "fieldname": "sequence_start_on",
+   "fieldtype": "Datetime",
+   "label": "Attribution active depuis",
+   "read_only": 1,
+   "no_copy": 1,
+   "description": "Les factures normalisees avant cette date ne recoivent pas de reference (elles ont deja ete imprimees sans)."
   },
   {
    "fieldname": "sb_cur",
@@ -627,6 +676,17 @@
    "role": "Accounts Manager",
    "read": 1,
    "write": 1
+  },
+  {
+   "role": "System Manager",
+   "permlevel": 1,
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "permlevel": 1,
+   "read": 1
   }
  ]
 }

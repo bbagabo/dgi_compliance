@@ -14,7 +14,8 @@ frappe.ui.form.on("DGI MCF Device", {
         }
         frm.add_custom_button(__("Ouvrir la page Poste MCF"), () => frappe.set_route("dgi-mcf-station"), __("Poste"));
         if (!["Detecte", "Declare", "A revalider"].includes(frm.doc.status)) return;
-        if (!frappe.user.has_role(["DGI Fiscal Manager", "System Manager"])) return;
+        // v5.4.0: a DGI Approbateur validates too (another person than the one who proposed it)
+        if (!frappe.user.has_role(["DGI Fiscal Manager", "System Manager", "DGI Approbateur"])) return;
         frm.add_custom_button(__("Valider ce MCF"), () => validate_dialog(frm), __("Validation"));
         frm.add_custom_button(__("Refuser"), () => frappe.prompt(
             { fieldname: "reason", fieldtype: "Small Text", reqd: 1, label: __("Motif du refus") },
@@ -55,9 +56,11 @@ function validate_dialog(frm) {
             { fieldname: "cmp", fieldtype: "HTML" },
             { fieldname: "accept_differences", fieldtype: "Small Text",
               label: __("Ecarts acceptes (motif obligatoire s'il y a des ecarts non bloquants)") },
-            { fieldname: "sb", fieldtype: "Section Break", label: __("Canal prioritaire (facultatif)") },
+            { fieldname: "sb", fieldtype: "Section Break", label: __("Canal prioritaire (facultatif)"),
+              hidden: !frappe.user.has_role(["DGI Fiscal Manager", "System Manager"]) },
             { fieldname: "primary_channel", fieldtype: "Select", options: "\ne-MCF\nMCF",
-              label: __("Derogation pour ce point de vente (vide : parametres generaux)") },
+              label: __("Derogation pour ce point de vente (vide : parametres generaux)"),
+              hidden: !frappe.user.has_role(["DGI Fiscal Manager", "System Manager"]) },
             { fieldname: "priority_reason", fieldtype: "Small Text", label: __("Motif de la derogation"),
               depends_on: "primary_channel", mandatory_depends_on: "primary_channel" },
         ],
@@ -77,7 +80,8 @@ function validate_dialog(frm) {
                 const rows = (m.rows || []).map((x) => `<tr class="${x.ok ? "" : (x.blocking ? "danger" : "warning")}">
                     <td>${esc(x.field)}</td><td>${esc(x.read || "-")}</td><td>${esc(x.expected || "-")}</td>
                     <td>${x.ok ? "OK" : (x.blocking ? __("Bloquant") : __("Ecart a accepter"))}</td></tr>`).join("");
-                d.fields_dict.cmp.$wrapper.html(`<p class="text-muted">${__("Valeurs lues dans le MCF par {0}, comparees aux valeurs attendues. Le NIF doit etre celui de la societe.", [esc(m.discovered_by || "?")])}</p>
+                const own = m.is_initiator ? `<p class="text-danger">${__("Vous avez propose ce MCF : une autre personne (DGI Fiscal Manager ou DGI Approbateur) doit le valider.")}</p>` : "";
+                d.fields_dict.cmp.$wrapper.html(`${own}<p class="text-muted">${__("Valeurs lues dans le MCF par {0}, comparees aux valeurs attendues. Le NIF doit etre celui de la societe.", [esc(m.discovered_by || "?")])}</p>
                     <table class="table table-bordered table-condensed"><thead><tr><th>${__("Controle")}</th><th>${__("Lu dans le MCF")}</th><th>${__("Attendu")}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`);
             } });
     };

@@ -22,8 +22,12 @@ RETURN_REASON = "Retour au canal principal"        # = return to the prioritized
 IN_FLIGHT = ("Leased", "Uncertain", "Checking", "Dispute")
 
 
+REQUEST_FIELDS = ("point_of_sale", "to_channel", "reason", "dgi_reference", "notes")
+
+
 class DGIChannelSwitch(Document):
     def validate(self):
+        self._freeze_request_for_approvers()
         self.from_channel = frappe.db.get_value("DGI Point of Sale", self.point_of_sale, "active_channel") or ""
         if self.reason == RETURN_REASON:
             # v5.3.0: the return goes to the prioritized channel (PVF override or general setting)
@@ -37,12 +41,28 @@ class DGIChannelSwitch(Document):
         if self.to_channel == self.from_channel:
             frappe.throw(_("Le point de vente est deja sur le canal {0}.").format(self.to_channel))
 
+    def _freeze_request_for_approvers(self):
+        """v5.4.0: a DGI Approbateur approves the request as it was made; he never changes it (otherwise he would
+        approve his own version). Frappe 16 needs the 'write' right to submit, hence this guard."""
+        if self.is_new() or frappe.flags.in_patch:
+            return
+        from dgi_compliance.fiscal.approvals import is_manager
+        if is_manager():
+            return
+        changed = [f for f in REQUEST_FIELDS if self.has_value_changed(f)]
+        if changed:
+            frappe.throw(_("Un DGI Approbateur approuve ou laisse la demande en l'etat ; il ne la modifie pas ({0}).")
+                         .format(", ".join(self.meta.get_label(f) for f in changed)), frappe.PermissionError)
+
     def _requested_by(self):
         if not self.requested_by:
             self.requested_by = frappe.session.user
 
     def before_submit(self):
-        frappe.only_for(("System Manager", "DGI Fiscal Manager"))
+        # v5.4.0: submitting = approving. A DGI Fiscal Manager or a DGI Approbateur, never a technical account,
+        # and another person than the requester while the two-person rule is on (fiscal.approvals).
+        from dgi_compliance.fiscal import approvals as A
+        role = A.require_approver(_("Approbation de la bascule de canal"))
         from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
         settings = get_settings()
         pvf = frappe.get_doc("DGI Point of Sale", self.point_of_sale)
@@ -55,10 +75,12 @@ class DGIChannelSwitch(Document):
             if cint(settings.get("switch_requires_dgi_reference")) and not ref:
                 frappe.throw(_("Indiquez la reference de l'accord DGI."))
             checks.append(_("bascule autorisee") + (_(" (reference {0})").format(ref) if ref else ""))
-        if cint(settings.get("switch_requires_two_people")) and self.owner == frappe.session.user \
-                and self.reason != "Mise en service":
-            frappe.throw(_("Regle des deux personnes : la bascule doit etre validee par un autre utilisateur que "
-                           "celui qui l'a demandee."))
+        if self.reason == "Mise en service":
+            mode = "other" if self.owner != frappe.session.user else "self"
+        else:
+            mode = A.check_two_people(self.owner, A.RULE_SWITCH, _("la bascule {0} de {1}").format(
+                self.name, self.point_of_sale), reference=self.name, point_of_sale=self.point_of_sale)
+        self.flags.dgi_approval = {"role": role, "mode": mode}
         busy = frappe.get_all("DGI Fiscal Operation", filters={"point_of_sale": pvf.name, "status": ["in", list(IN_FLIGHT)]},
                               pluck="name", limit=5)
         if busy:
@@ -106,9 +128,14 @@ class DGIChannelSwitch(Document):
         pvf.flags.dgi_system_update = True
         pvf.save(ignore_permissions=True)
         self.db_set({"effective_on": now_datetime(), "cancelled_operations": cancelled})
-        log_event(None, "BASCULE_CANAL", _("{0} : {1} -> {2} ({3}), {4} operation(s) en file annulee(s).")
-                  .format(self.point_of_sale, self.from_channel, self.to_channel, self.reason, cancelled),
-                  level="Alerte" if self.reason in FALLBACK_REASONS else "Info", point_of_sale=self.point_of_sale)
+        approval = self.flags.get("dgi_approval") or {}
+        log_event(None, "BASCULE_CANAL", _("{0} : {1} -> {2} ({3}), {4} operation(s) en file annulee(s) ; demandee par "
+                                           "{5}, approuvee par {6} ({7}).")
+                  .format(self.point_of_sale, self.from_channel, self.to_channel, self.reason, cancelled,
+                          self.owner, self.approved_by, approval.get("role") or "-"),
+                  level="Alerte" if self.reason in FALLBACK_REASONS else "Info", point_of_sale=self.point_of_sale,
+                  details={"switch": self.name, "requested_by": self.owner, "approved_by": self.approved_by,
+                           "role": approval.get("role"), "mode": approval.get("mode")})
 
     def before_cancel(self):
         frappe.throw(_("Une bascule ne s'annule pas : creez une bascule inverse."))

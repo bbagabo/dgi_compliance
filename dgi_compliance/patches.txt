@@ -1,4 +1,5 @@
 [pre_model_sync]
+dgi_compliance.patches.v5_4.approbateur_role
 
 [post_model_sync]
 dgi_compliance.patches.v1_2.seed_static_catalogs
@@ -15,3 +16,4 @@ dgi_compliance.patches.v5_0.v505_remove_matrix_c
 dgi_compliance.patches.v5_1.hl2_migrate
 dgi_compliance.patches.v5_2.hl2_station_fallback
 dgi_compliance.patches.v5_3.routage_dgi
+dgi_compliance.patches.v5_4.sequence_pdv

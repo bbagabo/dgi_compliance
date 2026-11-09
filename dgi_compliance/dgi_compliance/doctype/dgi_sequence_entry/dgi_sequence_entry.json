@@ -1,0 +1,179 @@
+{
+ "doctype": "DocType",
+ "name": "DGI Sequence Entry",
+ "module": "DGI Compliance",
+ "custom": 0,
+ "engine": "InnoDB",
+ "autoname": "field:reference",
+ "in_create": 1,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "title_field": "reference",
+ "search_fields": "sales_invoice,dgi_device,code_def",
+ "description": "Registre des references sequentielles (Ref. PDV), ajout seul (v5.4.0) : une ligne par facture normalisee, avec l'equipement DGI (NIM / NID) et ses compteurs DEF. La cle primaire est la reference elle-meme et la facture est unique : aucun doublon possible, meme en cas d'acces concurrent.",
+ "fields": [
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "label": "Reference",
+   "unique": 1,
+   "in_list_view": 1,
+   "bold": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "options": "Sales Invoice",
+   "label": "Facture",
+   "unique": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "sequence_code",
+   "fieldtype": "Data",
+   "label": "Code de sequence",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "year",
+   "fieldtype": "Int",
+   "label": "Annee",
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "number",
+   "fieldtype": "Int",
+   "label": "Numero",
+   "read_only": 1
+  },
+  {
+   "fieldname": "point_of_sale",
+   "fieldtype": "Link",
+   "options": "DGI Point of Sale",
+   "label": "Point de vente fiscal",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "label": "Societe",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_1",
+   "fieldtype": "Column Break",
+   "read_only": 1
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Data",
+   "label": "Canal",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "dgi_device",
+   "fieldtype": "Data",
+   "label": "Equipement DGI (NIM / NID)",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "dgi_counters",
+   "fieldtype": "Data",
+   "label": "Compteurs DEF (FC/TC type)",
+   "in_list_view": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "code_def",
+   "fieldtype": "Data",
+   "label": "Code DEF/DGI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "dgi_datetime",
+   "fieldtype": "Data",
+   "label": "DEF Heure",
+   "read_only": 1
+  },
+  {
+   "fieldname": "invoice_type",
+   "fieldtype": "Data",
+   "label": "Type DGI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_trace",
+   "fieldtype": "Section Break",
+   "label": "Tracabilite",
+   "read_only": 1
+  },
+  {
+   "fieldname": "operation",
+   "fieldtype": "Link",
+   "options": "DGI Fiscal Operation",
+   "label": "Operation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Data",
+   "label": "Attribuee lors de",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cb_2",
+   "fieldtype": "Column Break",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assigned_on",
+   "fieldtype": "Datetime",
+   "label": "Attribuee le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assigned_by",
+   "fieldtype": "Link",
+   "options": "User",
+   "label": "Session",
+   "read_only": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Fiscal Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "Accounts Manager",
+   "read": 1,
+   "export": 1,
+   "report": 1
+  },
+  {
+   "role": "DGI Approbateur",
+   "read": 1,
+   "report": 1
+  }
+ ]
+}

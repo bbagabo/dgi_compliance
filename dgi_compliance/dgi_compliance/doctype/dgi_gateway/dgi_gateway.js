@@ -6,7 +6,9 @@ frappe.ui.form.on("DGI Gateway", {
             args: Object.assign({ gateway: frm.doc.name }, args || {}),
             callback: (r) => { if (done) done(r.message || {}); frm.reload_doc(); },
         });
-        if (frm.doc.status !== "Revoquee") {
+        const manager = frappe.user.has_role(["DGI Fiscal Manager", "System Manager"]);
+        const approver = manager || frappe.user.has_role("DGI Approbateur");     // v5.4.0
+        if (frm.doc.status !== "Revoquee" && manager) {
             frm.add_custom_button(__("Generer un code d'enrolement"), () => {
                 call("generate_enrollment_code", {}, (m) => {
                     frappe.msgprint({
@@ -21,7 +23,10 @@ frappe.ui.form.on("DGI Gateway", {
                 });
             }, __("Passerelle"));
         }
-        if (frm.doc.status === "A approuver") {
+        if (frm.doc.status === "A approuver" && approver) {
+            if (frm.doc.enrolled_by && frm.doc.enrolled_by === frappe.session.user) {
+                frm.dashboard.add_comment(__("Vous avez enrole ce poste : une autre personne (DGI Fiscal Manager ou DGI Approbateur) compare l'empreinte et l'approuve."), "orange", true);
+            }
             frm.add_custom_button(__("Approuver"), () => {
                 frappe.prompt({ fieldname: "fingerprint", fieldtype: "Data", reqd: 1,
                                 label: __("Empreinte affichee sur le poste du site"),
@@ -30,7 +35,7 @@ frappe.ui.form.on("DGI Gateway", {
                     __("Approuver la passerelle"), __("Approuver"));
             }, __("Passerelle"));
         }
-        if (["Active", "A approuver", "Code emis"].includes(frm.doc.status)) {
+        if (["Active", "A approuver", "Code emis"].includes(frm.doc.status) && manager) {
             frm.add_custom_button(__("Revoquer"), () => {
                 frappe.prompt({ fieldname: "reason", fieldtype: "Small Text", reqd: 1, label: __("Motif") },
                     (v) => call("revoke_gateway", { reason: v.reason }), __("Revoquer la passerelle"), __("Revoquer"));

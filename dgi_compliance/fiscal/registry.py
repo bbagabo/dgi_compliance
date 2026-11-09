@@ -12,7 +12,7 @@ import json
 import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
-from frappe.utils import cint, now_datetime
+from frappe.utils import now_datetime
 
 from dgi_compliance.fiscal import mcf_format as F
 from dgi_compliance.fiscal.router import CHANNEL_EMCF, CHANNEL_MCF, FISCAL_ROLES, other_channel
@@ -130,25 +130,33 @@ def propose_from_browser(observation=None, point_of_sale=None) -> dict:
 
 @frappe.whitelist()
 def device_comparison(nid: str, point_of_sale: str | None = None) -> dict:
-    frappe.only_for(FISCAL_ROLES)
+    from dgi_compliance.fiscal.approvals import APPROVER_ROLES, can_approve, is_manager
+    frappe.only_for(APPROVER_ROLES)
     dev = frappe.get_doc(DEVICE, nid)
     return {"rows": comparison(nid, point_of_sale), "status": dev.status, "discovered_by": dev.discovered_by,
-            "point_of_sale": point_of_sale or dev.point_of_sale}
+            "point_of_sale": point_of_sale or dev.point_of_sale, "can_approve": can_approve(),
+            "can_set_channel": is_manager(), "is_initiator": dev.discovered_by == frappe.session.user}
 
 
 @frappe.whitelist(methods=["POST"])
 def validate_device(nid: str, point_of_sale: str, accept_differences: str | None = None,
                     primary_channel: str | None = None, priority_reason: str | None = None) -> dict:
-    """Explicit validation of a detected / declared MCF by a DGI Fiscal Manager."""
+    """Explicit validation of a detected / declared MCF by a DGI Fiscal Manager or, since v5.4.0, a
+    DGI Approbateur: another person than the one who proposed it while the two-person rule is on. The
+    approver only validates: the derogation of the prioritized channel stays a DGI Fiscal Manager decision."""
+    from dgi_compliance.fiscal import approvals as A
     from dgi_compliance.gateway.events import log_event
-    frappe.only_for(FISCAL_ROLES)
+    role = A.require_approver(_("Validation du MCF"))
+    manager = A.is_manager()
+    if primary_channel and not manager:
+        frappe.throw(_("La derogation du canal prioritaire est reservee a un DGI Fiscal Manager : validez le MCF "
+                       "sans canal, le responsable reglera le canal sur le point de vente."), frappe.PermissionError)
     frappe.db.sql(f"select name from `tab{DEVICE}` where name=%s for update", nid)
     dev = frappe.get_doc(DEVICE, nid)
     if dev.status not in VALIDATABLE:
         frappe.throw(_("Le MCF {0} est a l'etat {1} : rien a valider.").format(nid, dev.status))
-    if cint(_settings().get("station_approval_two_people")) and dev.discovered_by == frappe.session.user:
-        frappe.throw(_("Regle des deux personnes : le MCF doit etre valide par une autre personne que celle qui l'a "
-                       "propose ({0}).").format(dev.discovered_by))
+    mode = A.check_two_people(dev.discovered_by, A.RULE_STATION, _("la proposition du MCF {0}").format(nid),
+                              reference=nid, point_of_sale=point_of_sale, device=nid)
     if not dev.last_mid or not dev.nif:
         frappe.throw(_("Le MCF {0} n'a jamais ete lu : branchez-le sur la caisse et lisez-le depuis la page Poste MCF "
                        "avant de le valider (NIF a controler).").format(nid))
@@ -181,17 +189,25 @@ def validate_device(nid: str, point_of_sale: str, accept_differences: str | None
     if primary_channel:
         pvf.primary_channel = primary_channel
         pvf.priority_reason = priority_reason
-    pvf.save()
-    log_event(None, "MCF_VALIDE", _("MCF {0} valide par {1} pour {2} (MID {3}).").format(
-        nid, frappe.session.user, pvf.name, dev.validated_mid), level="Alerte", point_of_sale=pvf.name, device=nid,
-        details={"rows": rows, "accepted_differences": accept_differences})
+    if manager:
+        pvf.save()
+    else:
+        # DGI Approbateur: the rights were checked above for this single change (the MCF of the point de vente)
+        pvf.flags.dgi_system_update = True
+        pvf.save(ignore_permissions=True)
+    log_event(None, "MCF_VALIDE", _("MCF {0} valide par {1} pour {2} (MID {3} ; {4} ; propose par {5}).").format(
+        nid, frappe.session.user, pvf.name, dev.validated_mid, A.approval_note(role, mode), dev.discovered_by or "-"),
+        level="Alerte", point_of_sale=pvf.name, device=nid,
+        details={"rows": rows, "accepted_differences": accept_differences, "role": role, "mode": mode,
+                 "proposed_by": dev.discovered_by})
     return {"ok": True, "status": "Actif", "point_of_sale": pvf.name}
 
 
 @frappe.whitelist(methods=["POST"])
 def refuse_device(nid: str, reason: str) -> dict:
+    from dgi_compliance.fiscal.approvals import require_approver
     from dgi_compliance.gateway.events import log_event
-    frappe.only_for(FISCAL_ROLES)
+    require_approver(_("Refus du MCF"))
     if not (reason or "").strip():
         frappe.throw(_("Indiquez le motif du refus."))
     dev = frappe.get_doc(DEVICE, nid)

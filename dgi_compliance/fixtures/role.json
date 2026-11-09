@@ -26,5 +26,12 @@
   "role_name": "DGI Caisse MCF",
   "desk_access": 1,
   "disabled": 0
+ },
+ {
+  "doctype": "Role",
+  "name": "DGI Approbateur",
+  "role_name": "DGI Approbateur",
+  "desk_access": 1,
+  "disabled": 0
  }
 ]

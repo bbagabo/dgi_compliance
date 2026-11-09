@@ -259,7 +259,7 @@ class DGIStationPage {
 			$step.html(`<div class="alert alert-${mine ? "info" : "danger"}">
 				${mine ? __("En attente d'approbation. Empreinte de la cle de ce navigateur :") : __("La cle en attente d'approbation n'est PAS celle de ce navigateur. Prevenez le responsable fiscal.")}
 				<div style="font-size:22px;letter-spacing:2px;font-weight:700;margin:8px 0">${esc(fp || this.gw.key_fingerprint)}</div>
-				${__("Le responsable (DGI Fiscal Manager) compare cette empreinte dans ERPNext puis approuve le poste. Cette page demarre seule apres l'approbation.")}</div>`);
+				${__("Une autre personne que vous (DGI Fiscal Manager ou DGI Approbateur) compare cette empreinte dans ERPNext puis approuve le poste. Cette page demarre seule apres l'approbation.")}</div>`);
 			clearTimeout(this.wait_timer);
 			this.wait_timer = setTimeout(() => this.next_step(), 10000);
 			return;

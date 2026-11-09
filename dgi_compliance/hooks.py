@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "Helosystemes"
 app_description = "DGI RDC e-MCF / facture normalisee pour ERPNext v16 (application independante, upgrade-safe)"
-app_version = "5.3.1"
+app_version = "5.4.0"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -26,6 +26,8 @@ doc_events = {
             "dgi_compliance.edef.matrix.validate_currency",
             "dgi_compliance.fiscal.journal.validate_routing_fields",
             "dgi_compliance.edef.tasks.manage_draft_normalization_status",
+            # v5.4.0: the sequential reference (Ref. PDV) is written by the SFE only
+            "dgi_compliance.fiscal.sequence.keep_system_value",
         ],
         "before_print": "dgi_compliance.edef.tasks.register_print",
         "before_submit": "dgi_compliance.edef.tasks.before_sales_invoice_submit",
@@ -64,6 +66,7 @@ jinja = {
         "dgi_compliance.edef.printutils.dgi_print_label",
         "dgi_compliance.edef.printutils.dgi_is_foreign",
         "dgi_compliance.edef.printutils.dgi_cur_rate",
+        "dgi_compliance.edef.printutils.dgi_sequence_label",
     ],
 }
 
@@ -76,6 +79,8 @@ scheduler_events = {
     },
     "hourly": [
         "dgi_compliance.fiscal.operations.scheduled_sync_age",
+        # v5.4.0: normalized invoices whose sequential reference was not given (rolled back)
+        "dgi_compliance.fiscal.sequence.assign_missing",
     ],
     "daily": [
         "dgi_compliance.edef.tasks.check_token_expiry",
@@ -94,7 +99,7 @@ default_log_clearing_doctypes = {
 #     bench --site <site> export-fixtures --app dgi_compliance
 fixtures = [
     {"dt": "Role", "filters": [["name", "in", ["DGI MCF Agent", "DGI Fiscal Manager", "DGI Gateway",
-                                         "DGI Caisse MCF"]]]},
+                                         "DGI Caisse MCF", "DGI Approbateur"]]]},
     {"dt": "Custom Field", "filters": [["name", "in", [
         "Sales Invoice-custom_dgi_input_section",
         "Sales Invoice-dgi_invoice_type",
@@ -150,6 +155,7 @@ fixtures = [
         "Sales Invoice Item-dgi_specific_tax",
         "Item-dgi_specific_tax",
         "Item-dgi_hors_champ",
+        "Sales Invoice-dgi_sequence_ref",
         "Company-dgi_rccm",
         "Company-dgi_id_nat"
     ]]]},

@@ -38,6 +38,7 @@ def effective_priority(row) -> int:
 class DGIComplianceSettings(Document):
     def validate(self):
         self._validate_primary_channel()
+        self._validate_sequence()
         # Security: warn (do not block) when the active e-DEF endpoint is not HTTPS.
         url = self.base_url()
         if url and not url.lower().startswith("https://"):
@@ -130,14 +131,58 @@ class DGIComplianceSettings(Document):
                           "le suivent ; l'autre canal sert de secours selon leur politique.").format(self.primary_channel),
                         indicator="orange", title=_("Canal prioritaire"))
 
+    def _validate_sequence(self):
+        """v5.4.0: reference sequentielle (fiscal.sequence)."""
+        from dgi_compliance.fiscal import sequence as S
+        self.sequence_scope = self.get("sequence_scope") or S.SCOPE_PVF
+        self.sequence_print_label = (self.get("sequence_print_label") or "").strip()[:30] or S.DEFAULT_LABEL
+        code = S.validate_code(self.get("sequence_default_code") or S.DEFAULT_CODE,
+                               _("Code des factures sans point de vente fiscal"))
+        self.sequence_default_code = code
+        other = frappe.db.get_value("DGI Point of Sale", {"sequence_code": code})
+        if other:
+            frappe.throw(_("Le code {0} est deja celui du point de vente {1}.").format(code, other))
+        before = self.get_doc_before_save()
+        old = before.get("sequence_default_code") if before else None
+        if old and old != code and frappe.db.exists("DGI Sequence Entry", {"sequence_code": old, "point_of_sale": ["is", "not set"]}):
+            frappe.throw(_("Le code {0} a deja servi a des references : il ne se modifie plus.").format(old))
+        if before and (before.get("sequence_scope") or S.SCOPE_PVF) != self.sequence_scope \
+                and frappe.db.exists("DGI Sequence Entry", {}):
+            frappe.msgprint(_("Portee de la reference modifiee alors que des references existent : de nouvelles series "
+                              "commencent (les references deja attribuees ne changent pas)."), indicator="orange",
+                            title=_("Reference sequentielle"))
+
     def on_update(self):
         before = self.get_doc_before_save()
+        self._audit_controls(before)
         if before and (before.get("primary_channel") or "") != (self.get("primary_channel") or ""):
             from dgi_compliance.dgi_compliance.doctype.dgi_point_of_sale.dgi_point_of_sale import refresh_active_channels
             from dgi_compliance.gateway.events import log_event
             refresh_active_channels()
             log_event(None, "PRIORITE_MODIFIEE", _("Canal prioritaire general : {0} -> {1} par {2}.").format(
                 before.get("primary_channel") or "-", self.primary_channel, frappe.session.user), level="Alerte")
+
+    # v5.4.0: every change of a separation-of-duties rule or of the sequential reference is journalized
+    AUDITED = ("station_approval_two_people", "switch_requires_two_people", "sequence_enabled", "sequence_scope",
+               "sequence_print_label", "sequence_default_code")
+
+    def _audit_controls(self, before):
+        from frappe.utils import cint
+        # activation date of the reference: invoices normalized before it (or while it was off) get none
+        if cint(self.get("sequence_enabled")) and (not self.get("sequence_start_on")
+                                                   or (before and not cint(before.get("sequence_enabled")))):
+            from frappe.utils import now_datetime
+            self.db_set("sequence_start_on", now_datetime(), update_modified=False)
+        if not before:
+            return
+        changes = [(f, before.get(f), self.get(f)) for f in self.AUDITED if str(before.get(f) or "") != str(self.get(f) or "")]
+        if not changes:
+            return
+        from dgi_compliance.gateway.events import log_event
+        weakened = any(f.endswith("two_people") and not cint(new) for f, _old, new in changes)
+        log_event(None, "PARAMETRE_CONTROLE", _("Parametres de controle modifies par {0} : {1}.").format(
+            frappe.session.user, "; ".join(f"{f} {o!s} -> {n!s}" for f, o, n in changes)),
+            level="Alerte" if weakened else "Info", details={"changes": changes, "by": frappe.session.user})
 
     def payment_type_for(self, mode_of_payment: str, strict: bool = False) -> str | None:
         """Resolve the e-DEF payment type for an ERPNext Mode of Payment (v3.6).

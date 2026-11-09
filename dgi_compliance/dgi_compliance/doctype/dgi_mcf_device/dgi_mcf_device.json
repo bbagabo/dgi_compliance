@@ -364,6 +364,10 @@
   {
    "role": "DGI Caisse MCF",
    "read": 1
+  },
+  {
+   "role": "DGI Approbateur",
+   "read": 1
   }
  ]
 }

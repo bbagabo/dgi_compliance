@@ -242,10 +242,26 @@
   "fieldname": "custom_dgi_counters",
   "label": "Compteurs",
   "fieldtype": "Data",
-  "insert_after": "custom_dgi_code_def",
+  "insert_after": "dgi_sequence_ref",
   "read_only": 1,
   "allow_on_submit": 1,
   "no_copy": 1
+ },
+ {
+  "doctype": "Custom Field",
+  "name": "Sales Invoice-dgi_sequence_ref",
+  "dt": "Sales Invoice",
+  "fieldname": "dgi_sequence_ref",
+  "label": "Reference sequentielle (Ref. PDV)",
+  "fieldtype": "Data",
+  "insert_after": "custom_dgi_code_def",
+  "read_only": 1,
+  "no_copy": 1,
+  "allow_on_submit": 1,
+  "print_hide": 1,
+  "search_index": 1,
+  "in_standard_filter": 1,
+  "description": "Attribuee par le SFE quand la DGI renvoie les elements de securite : [code]-[annee]-[numero], serie ininterrompue par point de vente fiscal et par annee (v5.4.0). Le numero de facture reste la reference principale."
  },
  {
   "doctype": "Custom Field",

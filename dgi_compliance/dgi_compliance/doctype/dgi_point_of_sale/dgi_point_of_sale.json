@@ -196,6 +196,14 @@
    "label": "Code magasin"
   },
   {
+   "fieldname": "sequence_code",
+   "fieldtype": "Data",
+   "label": "Code de sequence (Ref. PDV)",
+   "unique": 0,
+   "in_standard_filter": 1,
+   "description": "Prefixe de la reference sequentielle imprimee sous le numero de facture : CODE-AAAA-000001 (v5.4.0). 2 a 10 lettres majuscules ou chiffres, unique. Propose a partir du code magasin ; ne se modifie plus une fois une reference attribuee."
+  },
+  {
    "fieldname": "pos_address",
    "fieldtype": "Small Text",
    "label": "Adresse"
@@ -300,6 +308,10 @@
   },
   {
    "role": "DGI Caisse MCF",
+   "read": 1
+  },
+  {
+   "role": "DGI Approbateur",
    "read": 1
   }
  ]
