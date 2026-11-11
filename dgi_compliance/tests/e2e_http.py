@@ -43,9 +43,8 @@ def prepare():
 
 def approve():
     frappe.set_user("Administrator")
-    from dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway import approve_gateway
     fp = frappe.db.get_value("DGI Gateway", GW, "key_fingerprint")
-    res = approve_gateway(GW, fp)
+    res = fx.approve_as_second_manager(GW, fp)        # v5.4.1: not the person who issued the code
     frappe.db.commit()
     print("APPROVED=" + res["status"] + " FP=" + fp)
 

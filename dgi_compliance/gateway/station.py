@@ -59,7 +59,16 @@ def enroll_station(gateway_id=None, code=None, public_key=None, device=None, hos
     device = frappe.parse_json(device) if isinstance(device, str) else (device or {})
     host = frappe.parse_json(host) if isinstance(host, str) else (host or {})
     host = dict(host, operator=frappe.session.user)
-    res = enroll_gateway(gw.name, code, public_key, device, host, enrolled_by=frappe.session.user)
+    from dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway import EnrollmentRefused
+    try:
+        res = enroll_gateway(gw.name, code, public_key, device, host, enrolled_by=frappe.session.user)
+    except EnrollmentRefused:
+        # v5.4.1: HTTP 417 with the message, never 401 (Frappe would end the cashier's session)
+        from frappe.utils.messages import clear_last_message
+        clear_last_message()
+        frappe.throw(_("Code d'enrolement refuse : il est mal saisi, expire (30 min) ou deja utilise. Demandez un "
+                       "nouveau code au responsable (DGI Gateway > Passerelle > Generer un code d'enrolement)."),
+                     title=_("Enrolement refuse"))
     frappe.db.commit()
     return res
 

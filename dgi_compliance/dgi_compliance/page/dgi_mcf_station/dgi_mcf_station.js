@@ -16,6 +16,10 @@ frappe.pages["dgi-mcf-station"].on_page_show = function (wrapper) {
 
 const STORE_KEY = "dgi-mcf-station";
 const esc = (s) => frappe.utils.escape_html(s === undefined || s === null ? "" : String(s));
+// v5.4.1: frappe.xcall rejects with `undefined` when ERPNext refuses with a message (shown in its own window):
+// `e.message` then raised a TypeError and the page showed nothing.
+const err_text = (e, fallback) => (e && e.message) || (typeof e === "string" && e)
+	|| fallback || __("Refuse par ERPNext : lisez le message affiche.");
 
 class DGIStationPage {
 	constructor(page, wrapper) {
@@ -160,7 +164,7 @@ class DGIStationPage {
 			return;
 		}
 		this.stations = await frappe.xcall("dgi_compliance.gateway.station.stations").catch((e) => {
-			this.alert(esc(e.message || e), "danger");
+			this.alert(esc(err_text(e)), "danger");
 			return [];
 		});
 		this.render_setup();
@@ -250,8 +254,15 @@ class DGIStationPage {
 		if (this.gw.status === "Active" && this.identity && fp === this.gw.key_fingerprint) {
 			return this.start_session();
 		}
+		const enrol_form = `<div class="row"><div class="col-sm-4"><input class="form-control dgi-st-code" placeholder="XXXX-XXXX-XXXX" autocomplete="off"></div>
+			<div class="col-sm-4"><button class="btn btn-primary btn-sm dgi-st-enrol">${__("Enroler ce poste")}</button></div></div>`;
+		const bind_enrol = () => $step.find(".dgi-st-enrol").on("click", () => this.enrol($step.find(".dgi-st-code").val()));
 		if (this.gw.status === "Active" && (!this.identity || fp !== this.gw.key_fingerprint)) {
-			$step.html(`<div class="alert alert-danger">${__("Ce poste est approuve avec une autre cle (empreinte {0}). Ce navigateur ne peut pas l'utiliser : faites revoquer le poste et enrolez ce navigateur avec un nouveau code.", [esc(this.gw.key_fingerprint)])}</div>`);
+			// v5.4.1: new PC, other browser or site data erased. The poste is re-enrolled HERE with a new code
+			// (before, the page only said to revoke the poste, and a revoked poste cannot be enrolled again).
+			$step.html(`<div class="alert alert-danger">${__("Ce poste est approuve avec la cle d'un autre navigateur (empreinte {0}) : ce navigateur ne peut pas l'utiliser tel quel.", [esc(this.gw.key_fingerprint)])}
+				<div style="margin-top:6px">${__("Pour utiliser CE navigateur a sa place : 1) le responsable ouvre le poste {0} dans ERPNext, Passerelle > Generer un code d'enrolement ; 2) branchez le MCF et cliquez sur Connecter le MCF ; 3) saisissez le code ci-dessous. L'ancien navigateur cesse alors de fonctionner et le poste doit etre approuve de nouveau par une autre personne.", [esc(this.gw.name)])}</div></div>${enrol_form}`);
+			bind_enrol();
 			return;
 		}
 		if (this.gw.status === "A approuver") {
@@ -266,9 +277,8 @@ class DGIStationPage {
 		}
 		$step.html(`
 			<div class="alert alert-info">${__("Enrolement de ce navigateur : 1) branchez le MCF et cliquez sur Connecter le MCF ; 2) saisissez le code d'enrolement communique par le responsable fiscal (valable 30 min, une seule fois).")}</div>
-			<div class="row"><div class="col-sm-4"><input class="form-control dgi-st-code" placeholder="XXXX-XXXX-XXXX" autocomplete="off"></div>
-			<div class="col-sm-4"><button class="btn btn-primary btn-sm dgi-st-enrol">${__("Enroler ce poste")}</button></div></div>`);
-		$step.find(".dgi-st-enrol").on("click", () => this.enrol($step.find(".dgi-st-code").val()));
+			${enrol_form}`);
+		bind_enrol();
 	}
 
 	// ------------------------------------------------------------------ MCF connection
@@ -284,7 +294,7 @@ class DGIStationPage {
 			await this.use_port(port);
 		} catch (e) {
 			if (e && e.name === "NotFoundError") return;      // dialog closed
-			this.alert(esc(e.message || e), "danger");
+			this.alert(esc(err_text(e)), "danger");
 		}
 	}
 	async connect_known_port() {
@@ -417,7 +427,7 @@ class DGIStationPage {
 			this.alert(__("MCF {0} propose (etat : {1}). Un responsable fiscal doit maintenant le valider dans ERPNext (DGI MCF Device > Valider ce MCF).",
 				[esc(r.nid), esc(__(r.status))]), "success");
 		} catch (e) {
-			this.alert(esc((e && e.message) || String(e)), "danger");
+			this.alert(esc(err_text(e)), "danger");
 		}
 	}
 	// v5.3.2: one test for every case. With a poste holding the port, it reads through the open port;
@@ -453,13 +463,13 @@ class DGIStationPage {
 					this.probe = { read };
 				} catch (e) {
 					if (e && e.name === "NotFoundError") return;          // window closed without choosing
-					if (!opts.nid) { this.alert(esc((e && e.message) || e), "danger"); return; }
+					if (!opts.nid) { this.alert(esc(err_text(e)), "danger"); return; }
 					error = (e && e.message) || String(e);
 				}
 			}
 			r = await D.record(error ? { error } : D.observation(read), opts);
 		} catch (e) {
-			this.alert(esc((e && e.message) || e), "danger");
+			this.alert(esc(err_text(e)), "danger");
 			return;
 		}
 		this.log(__("Test de connexion : {0} - {1}", [r.result, r.summary]));
@@ -548,7 +558,7 @@ class DGIStationPage {
 				[esc(r.name), r.created ? __("cree") : __("deja existant"),
 					`<a href="/app/dgi-gateway/${encodeURIComponent(r.name)}">${esc(r.name)}</a>`]), "info");
 		} catch (e) {
-			this.alert(esc((e && e.message) || e), "danger");
+			this.alert(esc(err_text(e)), "danger");
 		}
 	}
 
@@ -562,7 +572,7 @@ class DGIStationPage {
 			this.probe.status = await window.DGIMCFDesk.load_status({ nid: r.nid });
 			this.render_probe();
 		} catch (e) {
-			this.alert(esc((e && e.message) || e), "danger");
+			this.alert(esc(err_text(e)), "danger");
 		}
 	}
 
@@ -588,7 +598,7 @@ class DGIStationPage {
 			this.log(__("Poste enrole, empreinte {0}. En attente d'approbation.", [fp]));
 			await this.next_step();
 		} catch (e) {
-			this.alert(esc(e.message || e), "danger");
+			this.alert(esc(err_text(e, __("Enrolement refuse : lisez le message affiche. Si le code est mal saisi, expire (30 min) ou deja utilise, demandez un nouveau code au responsable."))), "danger");
 		}
 	}
 
@@ -598,7 +608,7 @@ class DGIStationPage {
 		let res;
 		try {
 			res = await frappe.xcall("dgi_compliance.gateway.station.open_session", { gateway_id: this.gw.name });
-		} catch (e) { this.alert(esc(e.message || e), "danger"); return; }
+		} catch (e) { this.alert(esc(err_text(e)), "danger"); return; }
 		if (!res.operator_token) { this.next_step(); return; }
 		this.session = res;
 		this.identity.clockOffsetS = res.server_epoch - Date.now() / 1000;
@@ -610,6 +620,7 @@ class DGIStationPage {
 			server, journal: this.journal, device: this.device, config: cfg,
 			onState: () => {
 				if (!this.station) return;
+				if (this.station.state.server === "connecte") this.auth_failures = 0;
 				this.device = this.station.dev;
 				if (this.station.lastStatus && this.station.lastStatus !== this.device_status) {
 					this.device_status = this.station.lastStatus;
@@ -618,7 +629,9 @@ class DGIStationPage {
 				this.render_cards();
 			},
 			log: (m) => this.log(m), reconnect: () => this.reconnect(),
+			onAuthError: (e) => this.recover_session(e),
 		});
+		this.auth_failures = 0;
 		$btn.show();
 		this.alert("");
 		this.log(__("Poste {0} demarre (operateur {1}).", [this.gw.name, frappe.session.user]));
@@ -626,6 +639,38 @@ class DGIStationPage {
 		this.queue_timer = setInterval(() => this.refresh_queue(), 30000);
 		this.refresh_queue();
 		this.station.run();
+	}
+	// v5.4.1: ERPNext refused the poste (HTTP 401 / 403). Most often the operator token expired or was lost
+	// (PC asleep more than 12 h, server restarted): a new one is asked with the cashier's session and the poste
+	// goes on by itself. Before, the poste retried for ever and the invoices waited until the page was reloaded.
+	async recover_session(err) {
+		if (!this.station || this.recovering) return false;
+		this.recovering = true;
+		try {
+			this.auth_failures = (this.auth_failures || 0) + 1;       // back to 0 at the next successful cycle (onState)
+			let res;
+			try {
+				res = await frappe.xcall("dgi_compliance.gateway.station.open_session", { gateway_id: this.gw.name });
+			} catch (e) {
+				this.alert(__("Le poste MCF est arrete : votre session ERPNext n'est plus valable ou le serveur ne repond pas. Reconnectez-vous a ERPNext dans ce navigateur puis rouvrez la page Poste MCF. Les factures destinees au MCF attendent."), "danger");
+				return false;
+			}
+			const same_key = !res.fingerprint || res.fingerprint === (await this.identity.fingerprint());
+			if (res.operator_token && same_key && this.auth_failures <= 2) {
+				this.station.server.operatorToken = res.operator_token;
+				this.session = res;
+				this.identity.clockOffsetS = res.server_epoch - Date.now() / 1000;
+				this.log(__("Session du poste renouvelee ({0}).", [String((err && err.message) || "").slice(0, 120)]));
+				this.alert("");
+				return true;
+			}
+			// poste revoked, key replaced by another browser, waiting for approval, or refusals that persist
+			const why = res.operator_token ? String((err && err.message) || "") : __("poste a l'etat {0}", [__(res.status || "?")]);
+			await this.stop_session();
+			this.alert(__("Le poste MCF est arrete : ERPNext refuse ce poste ({0}). Les factures destinees au MCF attendent ou partent en secours. Suivez l'indication ci-dessous ou prevenez le responsable fiscal.", [esc(why)]), "danger");
+			if (!res.operator_token || !same_key) await this.next_step();
+			return false;
+		} finally { this.recovering = false; }
 	}
 	async renew_token() {
 		if (!this.station) return;
@@ -636,7 +681,7 @@ class DGIStationPage {
 				this.station.server.operatorToken = res.operator_token;
 				frappe.xcall("dgi_compliance.gateway.station.close_session", { gateway_id: this.gw.name, operator_token: old }).catch(() => {});
 			}
-		} catch (e) { this.log(__("Renouvellement du jeton operateur impossible : {0}", [e.message || e])); }
+		} catch (e) { this.log(__("Renouvellement du jeton operateur impossible : {0}", [err_text(e)])); }
 	}
 	async refresh_queue() {
 		if (!this.gw) return;

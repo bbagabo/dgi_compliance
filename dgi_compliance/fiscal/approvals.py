@@ -93,6 +93,13 @@ def check_two_people(initiator: str | None, setting: str, action: str, *, refere
     if initiator != user:
         return "other"
     if rule_on(setting):
+        # journalized and committed before the refusal (the request itself is rolled back) - v5.4.1
+        from dgi_compliance.gateway.events import log_event
+        log_event(gateway, "APPROBATION_REFUSEE", _("{0} : {1} a tente d'approuver ce qu'il a lui-meme initie "
+                                                    "(regle des deux personnes).").format(action, user),
+                  level="Alerte", point_of_sale=point_of_sale, device=device,
+                  details={"reference": reference, "setting": setting, "user": user})
+        frappe.db.commit()
         # ValidationError (as before v5.4.0): a business rule, the user may hold the right role
         frappe.throw(_("Regle des deux personnes : {0} a ete initie par vous ; une autre personne (DGI Fiscal "
                        "Manager ou DGI Approbateur) doit l'approuver.").format(action))

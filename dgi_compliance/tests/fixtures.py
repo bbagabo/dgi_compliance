@@ -232,3 +232,27 @@ def make_invoice(customer, lines, template="DGI TVA HT", currency="CDF", rate=No
     if submit:
         si.submit()
     return si
+
+
+SECOND_MANAGER = "responsable2.tests@test.local"
+
+
+def second_manager() -> str:
+    """Another DGI Fiscal Manager than the session user: approves what the first one initiated (v5.4.1:
+    the two-person rule also covers the service gateways, whose initiator is the issuer of the code)."""
+    if not frappe.db.exists("User", SECOND_MANAGER):
+        u = frappe.get_doc({"doctype": "User", "email": SECOND_MANAGER, "first_name": "Responsable 2",
+                            "send_welcome_email": 0, "roles": [{"role": "DGI Fiscal Manager"}]})
+        u.flags.no_welcome_mail = True
+        u.insert(ignore_permissions=True)
+    return SECOND_MANAGER
+
+
+def approve_as_second_manager(gateway: str, fingerprint: str) -> dict:
+    from dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway import approve_gateway
+    current = frappe.session.user
+    frappe.set_user(second_manager())
+    try:
+        return approve_gateway(gateway, fingerprint)
+    finally:
+        frappe.set_user(current)

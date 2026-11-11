@@ -121,12 +121,40 @@ def user_may_operate(user: str) -> bool:
     return bool(set(frappe.get_roles(user)) & set(STATION_ROLES))
 
 
+REJECT_LOG_WINDOW_S = 600
+
+
 def _reject(event_code, message, gateway=None):
+    """Refuse the request and journalize the refusal.
+
+    v5.4.1: at most ONE journal line (and one alert to the managers) per gateway and kind of refusal every
+    10 minutes; the refusals in between are counted and reported on the next line. Before, every refused
+    request wrote an 'Alerte' event and e-mailed the DGI Fiscal Managers: a poste whose operator token had
+    expired (PC asleep) retried every 30 s, and anybody who knew a gateway identifier could flood the journal
+    and the mailboxes with unsigned requests."""
     from dgi_compliance.gateway.events import log_event
     try:
-        log_event(gateway, event_code, message, level="Alerte",
-                  details={"ip": getattr(frappe.local, "request_ip", None), "path": frappe.request.path})
-        frappe.db.commit()
+        base = f"dgi_gw_reject|{gateway}|{event_code}"
+        gate, counter = frappe.cache.make_key(base, shared=True), frappe.cache.make_key(base + "|n", shared=True)
+        if frappe.cache.set(gate, 1, ex=REJECT_LOG_WINDOW_S, nx=True):
+            suppressed = frappe.cache.get(counter)
+            frappe.cache.delete(counter)
+            suppressed = int(suppressed or 0)
+            request = getattr(frappe.local, "request", None)
+            log_event(gateway, event_code, message + (_(" ({0} refus identiques depuis la derniere alerte)")
+                                                      .format(suppressed) if suppressed else ""), level="Alerte",
+                      details={"ip": getattr(frappe.local, "request_ip", None),
+                               "path": getattr(request, "path", None), "suppressed": suppressed})
+            frappe.db.commit()
+        else:
+            frappe.cache.incr(counter)
+            frappe.cache.expire(counter, 24 * 3600)
+    except Exception:
+        pass
+    try:
+        # nothing but the refusal goes back to an unauthenticated caller (the alert e-mail may have left a
+        # server message such as "Please setup default outgoing Email Account")
+        frappe.local.message_log = []
     except Exception:
         pass
     raise GatewayAuthError(message)

@@ -52,6 +52,53 @@ _RESULT_FIELDS = ("custom_dgi_uid", "custom_dgi_code_def", "custom_dgi_counters"
                   "dgi_sequence_ref")     # v5.4.0: reference sequentielle (fiscal.sequence), written by the SFE
 
 
+# v5.4.1: every field written by the SFE only (security elements, fiscal trace, print counters). A form or an
+# API call never sets them: on a draft the stored values are kept, on a new invoice they are emptied.
+SYSTEM_FIELDS = tuple(f for f in FISCAL_FIELDS if f not in ("dgi_invoice_type", "dgi_point_of_sale")) + (
+    "dgi_sequence_ref", "custom_dgi_error", "custom_dgi_exchange_je", "custom_dgi_print_count",
+    "custom_dgi_first_printed_on", "custom_dgi_last_printed_on")
+
+
+def _system_write_allowed(doc) -> bool:
+    return bool(doc.flags.get("dgi_system_write") or frappe.flags.in_patch or frappe.flags.in_install
+                or frappe.flags.in_migrate)
+
+
+def guard_system_fields(doc, method=None):
+    """`validate` of Sales Invoice, FIRST hook (v5.4.1).
+
+    The security elements were read-only on the form only: through the API, a user allowed to edit a draft
+    could write a status 'Normalized' and a Code DEF/DGI of his own, then submit the invoice without any
+    normalization (SFE requirement 1.5). Whatever the client sends for the system fields is now replaced by
+    what the SFE stored (a stale form therefore never erases security elements received meanwhile); a new
+    invoice starts with empty system fields. The normalization flows write with db_set / set_value and are
+    not concerned. After submission, see protect_fiscal_fields."""
+    if _system_write_allowed(doc):
+        return
+    from dgi_compliance.fiscal.compare import same_value
+    fields = [f for f in SYSTEM_FIELDS if doc.meta.has_field(f)]
+    # the name may exist while is_new() (insert + submit in one call): the database is the reference
+    stored = frappe.db.get_value("Sales Invoice", doc.name, fields, as_dict=True) if doc.name else None
+    forged = []
+    for f in fields:
+        value = stored.get(f) if stored else None
+        if not same_value(doc.get(f), value):
+            if doc.get(f) and f not in ("custom_dgi_status", "custom_dgi_error"):
+                forged.append(f)
+            doc.set(f, value)
+    if forged and any(f in forged for f in ("custom_dgi_code_def", "custom_dgi_uid", "custom_dgi_qr_code",
+                                            "custom_dgi_nim", "custom_dgi_counters", "dgi_sequence_ref")):
+        # values that only a deliberate API call can send: journalized (committed by the save, or lost with it)
+        try:
+            from dgi_compliance.gateway.events import log_event
+            log_event(None, "CHAMPS_FISCAUX_IGNORES", _("Facture {0} : valeurs envoyees par {1} pour des champs reserves "
+                                                        "au SFE, ignorees ({2}).").format(doc.name or "(nouvelle)",
+                                                                                      frappe.session.user, ", ".join(forged)),
+                      level="Alerte", point_of_sale=doc.get("dgi_point_of_sale"))
+        except Exception:
+            pass
+
+
 def _commit():
     """Persist the fiscal state immediately (independent of the surrounding submit)."""
     if not frappe.flags.get("dgi_no_commit"):
@@ -350,8 +397,15 @@ def protect_fiscal_fields(doc, method=None):
     before = doc.get_doc_before_save()
     if not before:
         return
-    doc.set("dgi_sequence_ref", before.get("dgi_sequence_ref"))
-    changed = [f for f in FISCAL_FIELDS if (doc.get(f) or None) != (before.get(f) or None)]
+    if not _system_write_allowed(doc):
+        # v5.4.1: print counters, reference, error text... are kept as stored (allow_on_submit fields)
+        for f in SYSTEM_FIELDS:
+            if f not in FISCAL_FIELDS and doc.meta.has_field(f):
+                doc.set(f, before.get(f))
+    # v5.4.1: same_value - the desk form sends dates as text; a raw comparison refused every 'Update' of a
+    # submitted normalized invoice ("... non modifiables: custom_dgi_normalized_on")
+    from dgi_compliance.fiscal.compare import same_value
+    changed = [f for f in FISCAL_FIELDS if not same_value(doc.get(f), before.get(f))]
     if changed:
         frappe.throw(_("Champs fiscaux DGI non modifiables: {0}.").format(", ".join(changed)),
                      title=_("Elements de securite proteges"))

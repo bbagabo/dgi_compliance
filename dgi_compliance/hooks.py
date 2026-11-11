@@ -2,7 +2,7 @@ app_name = "dgi_compliance"
 app_title = "DGI Compliance"
 app_publisher = "Helosystemes"
 app_description = "DGI RDC e-MCF / facture normalisee pour ERPNext v16 (application independante, upgrade-safe)"
-app_version = "5.4.0"
+app_version = "5.4.1"
 app_license = "MIT"
 required_apps = ["erpnext"]
 
@@ -20,6 +20,8 @@ doctype_js = {
 doc_events = {
     "Sales Invoice": {
         "validate": [
+            # v5.4.1: FIRST - the fields written by the SFE are never taken from a form or an API call
+            "dgi_compliance.edef.tasks.guard_system_fields",
             "dgi_compliance.edef.tasks.enforce_return_invoice_type",
             "dgi_compliance.edef.rounding.apply_vat_ceiling",
             "dgi_compliance.edef.matrix.validate_sales_invoice",

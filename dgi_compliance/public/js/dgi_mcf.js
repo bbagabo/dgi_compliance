@@ -27,7 +27,7 @@
 })(typeof self !== "undefined" ? self : globalThis, function () {
 	"use strict";
 
-	const VERSION = "web-0.2.1";
+	const VERSION = "web-0.2.2";
 
 	// ======================================================================= protocol (protocol.py)
 	const SOH = 0x01, ETX = 0x03, BRK = 0x04, AMB = 0x05, NAK = 0x15, SYN = 0x16;
@@ -861,9 +861,11 @@
 
 	// ======================================================================= station loop (service.py)
 	class Station {
-		constructor({ server, journal, device, config = {}, onState, log, reconnect } = {}) {
+		constructor({ server, journal, device, config = {}, onState, log, reconnect, onAuthError } = {}) {
 			this.server = server; this.journal = journal; this.dev = device;
 			this.reconnect = reconnect || null;      // async () => MCFDevice | null (port unplugged then plugged back)
+			// v5.4.1: async (ServerError) => true when the page renewed the operator session (retry at once)
+			this.onAuthError = onAuthError || null;
 			this.cfg = Object.assign({ expected_nid: "", expected_nif: "", tolerance: 1, pending_timeout_s: 90,
 				station_poll_interval_s: 15, heartbeat_interval_s: 60 }, config);
 			this.executor = null;
@@ -986,7 +988,13 @@
 				}
 				if (e instanceof ServerError) {
 					this.setState({ server: e.message, last_error: e.message });
-					return [401, 403].includes(e.status) ? 30000 : 10000;
+					if ([401, 403].includes(e.status)) {
+						// operator token expired or lost (PC asleep, server restarted), poste revoked, key replaced
+						let renewed = false;
+						if (this.onAuthError) { try { renewed = await this.onAuthError(e); } catch (x) { renewed = false; } }
+						return renewed ? 1000 : 30000;
+					}
+					return 10000;
 				}
 				this.setState({ last_error: String(e && e.message || e) });
 				return 10000;

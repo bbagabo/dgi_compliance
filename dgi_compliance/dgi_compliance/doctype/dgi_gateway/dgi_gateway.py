@@ -23,6 +23,26 @@ from dgi_compliance.gateway import signing
 from dgi_compliance.gateway.events import log_event
 
 MANAGERS = ("System Manager", "DGI Fiscal Manager")
+# v5.4.1: written by the actions only (code, enrolment, approval, revocation, heartbeat), never by a form or
+# an API call: 'read only' on the form is not a server-side protection.
+SYSTEM_FIELDS = ("status", "public_key", "key_fingerprint", "key_algorithm", "api_user", "enrolled_by", "enrolled_on",
+                 "approved_by", "approved_on", "revoked_on", "enrollment_code_hash", "enrollment_expires",
+                 "code_issued_by", "last_seen", "last_ip", "gateway_version", "host_info", "offline_alert")
+# written at every heartbeat WITHOUT changing 'modified': an open form is stale within a minute. They are put
+# back as stored, silently; a difference is never treated as a forgery.
+TELEMETRY_FIELDS = ("last_seen", "last_ip", "gateway_version", "host_info", "offline_alert")
+IDENTITY_FIELDS = ("kind", "point_of_sale")      # frozen once a key was received
+
+
+from dgi_compliance.fiscal.compare import same_value as _same  # noqa: E402
+
+
+class EnrollmentRefused(frappe.AuthenticationError):
+    """Refused enrolment code. HTTP 401 for the service gateway (public endpoint). A SUBCLASS on purpose:
+    Frappe clears the session cookies for frappe.AuthenticationError itself, which logged the cashier out
+    of ERPNext at every mistyped code (v5.3.2 - v5.4.0)."""
+
+
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CODE_VALIDITY_MIN = 30
 
@@ -33,7 +53,36 @@ def _code_hash(gateway_id: str, code: str) -> str:
 
 
 class DGIGateway(Document):
+    def _guard_system_fields(self):
+        if self.flags.get("dgi_action") or frappe.flags.in_patch or frappe.flags.in_install or frappe.flags.in_migrate:
+            return
+        if self.is_new():
+            # a gateway is born 'Nouvelle', without key: it becomes Active by enrolment + approval only
+            for f in SYSTEM_FIELDS:
+                self.set(f, None)
+            self.status, self.offline_alert = "Nouvelle", 0
+            return
+        before = self.get_doc_before_save()
+        if not before:
+            return
+        for f in TELEMETRY_FIELDS:
+            self.set(f, before.get(f))
+        changed = [f for f in SYSTEM_FIELDS if f not in TELEMETRY_FIELDS and not _same(self.get(f), before.get(f))]
+        if before.get("public_key"):
+            changed += [f for f in IDENTITY_FIELDS if not _same(self.get(f), before.get(f))]
+        if changed:
+            try:
+                log_event(self.name, "MODIFICATION_REFUSEE", _("{0} a tente de modifier {1} sur la passerelle {2}.")
+                          .format(frappe.session.user, ", ".join(changed), self.name), level="Critique")
+                frappe.db.commit()
+            except Exception:
+                pass
+            frappe.throw(_("Champs geres par le systeme, non modifiables : {0}. Utilisez les actions Generer un "
+                           "code, Approuver ou Revoquer.").format(", ".join(self.meta.get_label(f) for f in changed)),
+                         frappe.PermissionError)
+
     def validate(self):
+        self._guard_system_fields()
         self.gateway_id = (self.gateway_id or "").strip().upper()
         if not self.gateway_id or any(c.isspace() for c in self.gateway_id):
             frappe.throw(_("Identifiant de passerelle invalide (pas d'espace)."))
@@ -105,14 +154,15 @@ def enroll_gateway(gateway_id, code, public_key, device, host, enrolled_by=None)
     gateway_id = (gateway_id or "").strip().upper()
     generic = _("Enrolement refuse : code invalide, expire ou deja utilise.")
     if not gateway_id or not frappe.db.exists("DGI Gateway", gateway_id):
-        frappe.throw(generic, frappe.AuthenticationError)
+        frappe.throw(generic, EnrollmentRefused)
     gw = frappe.get_doc("DGI Gateway", gateway_id)
     if not gw.enrollment_code_hash or not gw.enrollment_expires \
             or get_datetime(gw.enrollment_expires) < now_datetime() \
             or not hmac.compare_digest(gw.enrollment_code_hash, _code_hash(gw.name, code)):
-        log_event(gw.name, "ENROLEMENT_REFUSE", _("Code invalide, expire ou deja utilise."), level="Alerte")
+        log_event(gw.name, "ENROLEMENT_REFUSE", _("Code invalide, expire ou deja utilise (saisi par {0}).")
+                  .format(enrolled_by or _("la passerelle")), level="Alerte")
         frappe.db.commit()
-        frappe.throw(generic, frappe.AuthenticationError)
+        frappe.throw(generic, EnrollmentRefused)
     # the code is consumed whatever happens next
     gw.enrollment_code_hash, gw.enrollment_expires = None, None
     try:
@@ -192,17 +242,25 @@ def approve_gateway(gateway: str, fingerprint: str | None = None) -> dict:
     (two-person rule), never a technical account (fiscal.approvals)."""
     from dgi_compliance.fiscal import approvals as A
     role = A.require_approver(_("Approbation du poste"))
+    frappe.db.sql("select name from `tabDGI Gateway` where name=%s for update", gateway)
     gw = frappe.get_doc("DGI Gateway", gateway)
     if gw.status != "A approuver":
         frappe.throw(_("Seule une passerelle 'A approuver' peut etre approuvee."))
     if gw.api_user and gw.api_user == frappe.session.user:
         frappe.throw(_("Le compte technique d'une passerelle ne peut pas approuver."), frappe.PermissionError)
+    if not frappe.has_permission("DGI Point of Sale", "read", gw.point_of_sale):
+        frappe.throw(_("Vous n'avez pas acces au point de vente {0}.").format(gw.point_of_sale), frappe.PermissionError)
     typed = (fingerprint or "").strip().upper().replace(" ", "")
     if not typed or not hmac.compare_digest(typed, (gw.key_fingerprint or "").upper()):
+        # committed before the refusal: the request is rolled back, the journal entry must stay (v5.4.1)
         log_event(gw.name, "APPROBATION_REFUSEE", _("Empreinte saisie par {0} differente de la cle recue.")
                   .format(frappe.session.user), level="Alerte")
+        frappe.db.commit()
         frappe.throw(_("L'empreinte saisie ne correspond pas a la cle recue : n'approuvez pas ce poste."))
-    mode = A.check_two_people(gw.get("enrolled_by"), A.RULE_STATION, _("l'enrolement du poste {0}").format(gw.name),
+    # v5.4.1: a service gateway has no logged-in enrolling person: the one who issued the code is its
+    # initiator. Before, a manager could create a 'Service' gateway, enrol a key of his own and approve it alone.
+    initiator = gw.get("enrolled_by") or gw.get("code_issued_by")
+    mode = A.check_two_people(initiator, A.RULE_STATION, _("l'enrolement du poste {0}").format(gw.name),
                               reference=gw.name, gateway=gw.name)
     for other in frappe.get_all("DGI Gateway", filters={"mcf_device": gw.mcf_device, "status": "Active",
                                                         "name": ["!=", gw.name]}, pluck="name"):
@@ -211,7 +269,7 @@ def approve_gateway(gateway: str, fingerprint: str | None = None) -> dict:
     gw.status, gw.approved_by, gw.approved_on = "Active", frappe.session.user, now_datetime()
     _action_save(gw)
     log_event(gw.name, "APPROUVEE", _("Passerelle approuvee par {0} (empreinte {1} ; {2} ; enrolee par {3}).")
-              .format(frappe.session.user, gw.key_fingerprint, A.approval_note(role, mode), gw.get("enrolled_by") or "-"),
+              .format(frappe.session.user, gw.key_fingerprint, A.approval_note(role, mode), initiator or "-"),
               details={"approved_by": frappe.session.user, "role": role, "mode": mode,
                        "enrolled_by": gw.get("enrolled_by"), "code_issued_by": gw.get("code_issued_by")})
     return {"status": gw.status}

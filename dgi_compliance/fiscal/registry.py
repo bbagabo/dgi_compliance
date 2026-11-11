@@ -52,7 +52,9 @@ def record_observation(observation: dict, by: str, gateway: str | None = None) -
         if dev.status == "Actif":
             check_identity(dev, mid=mid, nif=values["nif"], gateway=gateway)
             values.pop("last_status_on", None)
-        elif dev.status in ("Detecte", "Declare", "A revalider") and not dev.discovered_by:
+        elif dev.status in ("Detecte", "Declare", "A revalider"):
+            # v5.4.1: the proposer is the person who supplied the reading that will be validated. A new reading
+            # by somebody else replaces the proposer: nobody validates values he sent himself.
             values.update({"discovered_by": by, "discovered_on": now_datetime(), "discovered_gateway": gateway})
         frappe.db.set_value(DEVICE, nid, {k: v for k, v in values.items() if v is not None or k == "nif"},
                             update_modified=False)
@@ -151,6 +153,8 @@ def validate_device(nid: str, point_of_sale: str, accept_differences: str | None
     if primary_channel and not manager:
         frappe.throw(_("La derogation du canal prioritaire est reservee a un DGI Fiscal Manager : validez le MCF "
                        "sans canal, le responsable reglera le canal sur le point de vente."), frappe.PermissionError)
+    if not frappe.has_permission("DGI Point of Sale", "read", point_of_sale):
+        frappe.throw(_("Vous n'avez pas acces au point de vente {0}.").format(point_of_sale), frappe.PermissionError)
     frappe.db.sql(f"select name from `tab{DEVICE}` where name=%s for update", nid)
     dev = frappe.get_doc(DEVICE, nid)
     if dev.status not in VALIDATABLE:

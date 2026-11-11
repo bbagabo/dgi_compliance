@@ -149,13 +149,13 @@ class HL2Base(unittest.TestCase):
             frappe.get_doc({"doctype": "DGI Gateway", "gateway_id": site.gateway_id, "kind": SERVICE,
                             "point_of_sale": pvf}).insert(ignore_permissions=True)
         from dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway import (
-            approve_gateway, enroll_gateway, generate_enrollment_code)
+            enroll_gateway, generate_enrollment_code)
         code = generate_enrollment_code(site.gateway_id)["code"]
         st = site.dev.status()
         res = enroll_gateway(site.gateway_id, code, site.identity.public_key_b64,
                              {"mid": st["mid"], "nif": st["nif"]}, {"hostname": "test"})
         assert res["fingerprint"] == site.identity.fingerprint
-        approve_gateway(site.gateway_id, site.identity.fingerprint)
+        fx.approve_as_second_manager(site.gateway_id, site.identity.fingerprint)
 
     @classmethod
     def tearDownClass(cls):

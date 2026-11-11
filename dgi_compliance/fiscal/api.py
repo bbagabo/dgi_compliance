@@ -28,10 +28,10 @@ def cancel_queued(operation: str) -> dict:
     op = frappe.get_doc(DOCTYPE, operation)
     if not (frappe.has_permission("Sales Invoice", "write", op.sales_invoice) or set(frappe.get_roles()) & set(MANAGERS)):
         frappe.throw(_("Permission insuffisante."), frappe.PermissionError)
-    if op.status != "Queued":
+    from dgi_compliance.fiscal.operations import withdraw_queued
+    op = withdraw_queued(op.name, _("Annulee par {0}").format(frappe.session.user))      # under row lock (v5.4.1)
+    if not op:
         frappe.throw(_("Seule une operation encore en file (jamais transmise au MCF) peut etre annulee."))
-    op.db_set({"status": "Cancelled", "finished_at": now_datetime(),
-               "error_message": _("Annulee par {0}").format(frappe.session.user)})
     frappe.db.set_value("Sales Invoice", op.sales_invoice, {"custom_dgi_status": "Pending", "custom_dgi_error": None},
                         update_modified=False)
     _publish(op)

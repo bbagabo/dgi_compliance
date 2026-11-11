@@ -224,3 +224,18 @@ def statut_state():
                                                   fields=["name", "kind", "status"]),
         "tests": frappe.db.count("DGI Gateway Event", {"event_code": "TEST_CONNECTIVITE", "mcf_device": NID_T}),
     }, indent=None))
+
+
+def new_code():
+    """v5.4.1 (e2e_revue_541.js): a new enrolment code for the station, whatever its state (key rotation)."""
+    from dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway import generate_enrollment_code
+    frappe.set_user("Administrator")
+    code = generate_enrollment_code(GW)["code"]
+    frappe.db.commit()
+    print("CODE=" + code)
+
+
+def gateway_state():
+    row = frappe.db.get_value("DGI Gateway", GW, ["status", "key_fingerprint", "enrolled_by", "approved_by"], as_dict=True)
+    events = frappe.get_all("DGI Gateway Event", filters={"gateway": GW}, pluck="event_code", order_by="creation desc", limit=12)
+    print("GW=" + frappe.as_json(dict(row, events=events), indent=None))

@@ -265,7 +265,9 @@ def record_desk_test(observation=None, expected_nid=None, origin=None, gateway_i
         "connection_test_details": json.dumps({"checks": checks, "observation": obs, "origin": origin,
                                                "gateway": gateway_id}, ensure_ascii=False, default=str)[:20000],
     }
-    if obs.get("mid") and not obs.get("error"):
+    if obs.get("mid") and not obs.get("error") and dev.status == "Actif":
+        # v5.4.1: a test never changes the reading of an MCF awaiting validation (only a proposal does, and it
+        # names its author): the validator cannot supply the MID he validates
         values["last_mid"] = str(obs.get("mid"))[:40]
     frappe.db.set_value(DEVICE, dev.name, values, update_modified=False)
     if not obs.get("error") and (not expected_nid or nid == expected_nid):

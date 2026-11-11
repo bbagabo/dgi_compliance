@@ -75,7 +75,15 @@ class DGIChannelSwitch(Document):
             if cint(settings.get("switch_requires_dgi_reference")) and not ref:
                 frappe.throw(_("Indiquez la reference de l'accord DGI."))
             checks.append(_("bascule autorisee") + (_(" (reference {0})").format(ref) if ref else ""))
-        if self.reason == "Mise en service":
+        # v5.4.1: 'Mise en service' is exempt from the two-person rule ONLY while it is a real commissioning:
+        # the first switch of a point de vente that never normalized an invoice. Before, this reason let one
+        # person switch any point de vente alone, whatever the two-person rule said. Any other use of it is
+        # approved like every switch.
+        commissioning = self.reason == "Mise en service" and not frappe.db.exists(
+            "DGI Channel Switch", {"point_of_sale": self.point_of_sale, "docstatus": 1, "name": ["!=", self.name]}) \
+            and not frappe.db.exists("Sales Invoice", {"dgi_point_of_sale": self.point_of_sale,
+                                                       "custom_dgi_status": "Normalized"})
+        if commissioning:
             mode = "other" if self.owner != frappe.session.user else "self"
         else:
             mode = A.check_two_people(self.owner, A.RULE_SWITCH, _("la bascule {0} de {1}").format(
@@ -112,9 +120,11 @@ class DGIChannelSwitch(Document):
         cancelled = 0
         for name in frappe.get_all("DGI Fiscal Operation", filters={"point_of_sale": self.point_of_sale, "status": "Queued"},
                                    pluck="name"):
-            op = frappe.get_doc("DGI Fiscal Operation", name)
-            op.db_set({"status": "Cancelled", "finished_at": now_datetime(),
-                       "error_message": _("Annulee par la bascule {0}").format(self.name)})
+            from dgi_compliance.fiscal.operations import withdraw_queued
+            op = withdraw_queued(name, _("Annulee par la bascule {0}").format(self.name))    # under row lock (v5.4.1)
+            if not op:
+                frappe.throw(_("L'operation {0} vient d'etre prise par le poste MCF : attendez sa fin avant de "
+                               "basculer.").format(name))
             if op.sales_invoice:
                 frappe.db.set_value("Sales Invoice", op.sales_invoice,
                                     {"custom_dgi_status": "Pending",

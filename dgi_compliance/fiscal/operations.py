@@ -140,13 +140,29 @@ def _requeue(op, reason):
     return new
 
 
+def locked_status(name: str) -> str | None:
+    """Status of an operation read UNDER ITS ROW LOCK (v5.4.1). Cancelling a queued operation and leasing it
+    are two requests that may cross: both take this lock and read the status again before writing, so an
+    operation is never Cancelled after it was given to a gateway, nor leased after it was cancelled."""
+    rows = frappe.db.sql(f"select status from `tab{DOCTYPE}` where name=%s for update", name)
+    return rows[0][0] if rows else None
+
+
+def withdraw_queued(name: str, reason: str):
+    """Queued -> Cancelled under row lock. Returns the operation, or None when it is no longer Queued."""
+    if locked_status(name) != "Queued":
+        return None
+    op = frappe.get_doc(DOCTYPE, name)
+    op.db_set({"status": "Cancelled", "finished_at": now_datetime(), "error_message": (reason or "")[:500]})
+    _publish(op)
+    return op
+
+
 def cancel_queued_for_invoice(invoice: str, reason: str) -> int:
     n = 0
     for name in frappe.get_all(DOCTYPE, filters={"sales_invoice": invoice, "status": "Queued"}, pluck="name"):
-        op = frappe.get_doc(DOCTYPE, name)
-        op.db_set({"status": "Cancelled", "finished_at": now_datetime(), "error_message": reason[:500]})
-        _publish(op)
-        n += 1
+        if withdraw_queued(name, reason):
+            n += 1
     return n
 
 
@@ -213,6 +229,8 @@ def lease_for_gateway(gw) -> dict:
     unc = frappe.get_all(DOCTYPE, filters={"mcf_device": device_name, "status": "Uncertain"},
                          pluck="name", order_by="creation asc", limit=1)
     if unc:
+        if locked_status(unc[0]) != "Uncertain":
+            return idle
         op = frappe.get_doc(DOCTYPE, unc[0])
         op.db_set({"status": "Checking", "gateway": gw.name, "lease_token": secrets.token_hex(16),
                    "station_user": getattr(frappe.local, "dgi_station_user", None),
@@ -224,6 +242,8 @@ def lease_for_gateway(gw) -> dict:
     queued = frappe.get_all(DOCTYPE, filters={"mcf_device": device_name, "status": "Queued"},
                             pluck="name", order_by="creation asc", limit=1)
     if not queued:
+        return idle
+    if locked_status(queued[0]) != "Queued":       # cancelled or withdrawn meanwhile: next cycle
         return idle
     op = frappe.get_doc(DOCTYPE, queued[0])
     op.db_set({"status": "Leased", "gateway": gw.name, "lease_token": secrets.token_hex(16),
@@ -332,6 +352,7 @@ def apply_result(gw, result: dict) -> dict:
     if op.mcf_device != gw.mcf_device:
         log_event(gw.name, "OPERATION_ETRANGERE", _("Resultat pour une operation d'un autre MCF ({0}).").format(op.name),
                   level="Critique")
+        frappe.db.commit()          # the refusal rolls the request back: the journal entry must stay (v5.4.1)
         frappe.throw(_("Cette operation ne concerne pas le MCF de la passerelle."), frappe.PermissionError)
     if op.op_type != "RESYNC" and op.status not in ("Normalized", "Rejected", "Cancelled", "Dispute") \
             and op.gateway != gw.name:
@@ -340,6 +361,7 @@ def apply_result(gw, result: dict) -> dict:
                   _("Resultat {0} pour {1} ({2}) qui n'a pas ete confiee a cette passerelle.")
                   .format(result.get("outcome"), op.name, op.status), level="Critique",
                   point_of_sale=op.point_of_sale, device=op.mcf_device)
+        frappe.db.commit()          # idem (v5.4.1)
         frappe.throw(_("Operation non confiee a cette passerelle."), frappe.PermissionError)
     device = frappe.get_doc("DGI MCF Device", op.mcf_device)
     outcome = result.get("outcome")
