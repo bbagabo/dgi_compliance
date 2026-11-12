@@ -2,6 +2,9 @@
 
 Nouvelle -> (code d'enrolement) Code emis -> (enroll depuis le poste) A approuver
          -> (approbation humaine) Active -> (revocation) Revoquee
+v5.4.2: A approuver -> (demande annulee) Nouvelle ; Active -> (approbation rejetee) Nouvelle. Both by a
+DGI Fiscal Manager or a DGI Approbateur, with a reason; the key is discarded and the poste must be enrolled
+again with a new code (a revoked poste, on the contrary, is closed for good).
 The status only changes through these actions. The enrolment code is shown once, stored as a
 hash, valid 30 minutes and single use. Approval compares the key fingerprint shown on the site
 machine with the one stored here (mandatory) and, for a browser station, must be done by another
@@ -291,6 +294,60 @@ def _revoke(gateway: str, reason: str | None = None) -> dict:
     _action_save(gw)
     log_event(gw.name, "REVOQUEE", reason or _("Revoquee par {0}").format(frappe.session.user), level="Alerte")
     return {"status": gw.status}
+
+
+def _withdraw(gateway: str, reason: str | None, expected_status: str, action: str, event_code: str, message: str) -> dict:
+    """Common part of 'Annuler la demande' and 'Rejeter l'approbation' (v5.4.2): the poste goes back to
+    'Nouvelle' without key. Never the two-person rule: withdrawing a right is always allowed to an approver,
+    including the person who enrolled the poste."""
+    from dgi_compliance.fiscal import approvals as A
+    role = A.require_approver(action)
+    reason = (reason or "").strip()
+    if len(reason) < 3:
+        frappe.throw(_("{0} : le motif est obligatoire.").format(action))
+    frappe.db.sql("select name from `tabDGI Gateway` where name=%s for update", gateway)
+    gw = frappe.get_doc("DGI Gateway", gateway)
+    if gw.status != expected_status:
+        frappe.throw(_("{0} : le poste {1} est a l'etat {2} (attendu : {3}).")
+                     .format(action, gw.name, _(gw.status), _(expected_status)))
+    if gw.api_user and gw.api_user == frappe.session.user:
+        frappe.throw(_("Le compte technique d'une passerelle ne peut pas faire cette action."), frappe.PermissionError)
+    if not frappe.has_permission("DGI Point of Sale", "read", gw.point_of_sale):
+        frappe.throw(_("Vous n'avez pas acces au point de vente {0}.").format(gw.point_of_sale), frappe.PermissionError)
+    before = {"status": gw.status, "fingerprint": gw.key_fingerprint, "enrolled_by": gw.get("enrolled_by"),
+              "enrolled_on": str(gw.get("enrolled_on") or ""), "approved_by": gw.get("approved_by"),
+              "approved_on": str(gw.get("approved_on") or ""), "code_issued_by": gw.get("code_issued_by")}
+    if gw.api_user:
+        frappe.db.set_value("User", gw.api_user, "enabled", 0)
+    gw.public_key = gw.key_fingerprint = gw.key_algorithm = None
+    gw.enrolled_by = gw.enrolled_on = gw.approved_by = gw.approved_on = None
+    gw.enrollment_code_hash = gw.enrollment_expires = gw.code_issued_by = None
+    gw.status = "Nouvelle"
+    _action_save(gw)
+    log_event(gw.name, event_code, message.format(user=frappe.session.user, fingerprint=before["fingerprint"] or "-",
+                                                 enrolled_by=before["enrolled_by"] or "-",
+                                                 approved_by=before["approved_by"] or "-", reason=reason[:300]),
+              level="Alerte", details=dict(before, by=frappe.session.user, role=role, reason=reason))
+    return {"status": gw.status}
+
+
+@frappe.whitelist(methods=["POST"])
+def cancel_enrollment_request(gateway: str, reason: str | None = None) -> dict:
+    """v5.4.2 - 'Annuler la demande' : a poste waiting for approval is refused. DGI Fiscal Manager or
+    DGI Approbateur. The key received is discarded; a new code is needed to enrol the poste again."""
+    return _withdraw(gateway, reason, "A approuver", _("Annulation de la demande d'approbation"), "DEMANDE_ANNULEE",
+                     _("Demande d'approbation annulee par {user} (empreinte {fingerprint}, enrolee par {enrolled_by}). "
+                       "Motif : {reason}"))
+
+
+@frappe.whitelist(methods=["POST"])
+def reject_approval(gateway: str, reason: str | None = None) -> dict:
+    """v5.4.2 - 'Rejeter l'approbation' : an approved (Active) poste loses its approval. DGI Fiscal Manager or
+    DGI Approbateur. The poste stops at once (its signed requests are refused), its technical account is
+    disabled; it can be enrolled again with a new code and approved again."""
+    return _withdraw(gateway, reason, "Active", _("Rejet de l'approbation du poste"), "APPROBATION_REJETEE",
+                     _("Approbation rejetee par {user} (empreinte {fingerprint}, approuvee par {approved_by}, "
+                       "enrolee par {enrolled_by}). Motif : {reason}"))
 
 
 def gateway_config(gw) -> dict:

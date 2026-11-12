@@ -17,3 +17,4 @@ dgi_compliance.patches.v5_1.hl2_migrate
 dgi_compliance.patches.v5_2.hl2_station_fallback
 dgi_compliance.patches.v5_3.routage_dgi
 dgi_compliance.patches.v5_4.sequence_pdv
+dgi_compliance.patches.v5_4.rapports_par_pdv

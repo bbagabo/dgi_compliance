@@ -29,7 +29,11 @@ def log_event(gateway, code, message, *, level="Info", details=None, point_of_sa
 
 
 def notify(subject, message):
-    """Alert the DGI Fiscal Managers (falls back to the e-mail list of DGI Compliance Settings)."""
+    """Alert the DGI Fiscal Managers (falls back to the e-mail list of DGI Compliance Settings).
+
+    v5.4.2: a server message left by the e-mail (e.g. "Please setup default outgoing Email Account") is never
+    shown to the person whose action raised the alert: only the messages of the action itself go back."""
+    shown = len(getattr(frappe.local, "message_log", None) or [])
     try:
         from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
         settings = get_settings()
@@ -43,3 +47,8 @@ def notify(subject, message):
             frappe.sendmail(recipients=recipients, subject=subject, message=message, delayed=True)
     except Exception:
         frappe.log_error(title="DGI notification", message=frappe.get_traceback())
+    finally:
+        try:
+            del frappe.local.message_log[shown:]
+        except Exception:
+            pass

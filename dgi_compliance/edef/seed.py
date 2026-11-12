@@ -320,3 +320,6 @@ def after_install():
     seed_validation_matrix()
     seed_currency_rules()
     set_default_print_format()
+    # v5.4.2: reports X / Z without the rows at zero (a Check of a Single has no stored default)
+    from dgi_compliance.patches.v5_4.rapports_par_pdv import execute as report_defaults
+    report_defaults()

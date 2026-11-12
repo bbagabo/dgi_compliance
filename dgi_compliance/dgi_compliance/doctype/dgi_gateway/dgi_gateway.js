@@ -35,6 +35,19 @@ frappe.ui.form.on("DGI Gateway", {
                     __("Approuver la passerelle"), __("Approuver"));
             }, __("Passerelle"));
         }
+        // v5.4.2: a DGI Fiscal Manager or a DGI Approbateur cancels a pending request, or rejects an approval
+        const withdraw = (label, method, title, help) => frm.add_custom_button(label, () => {
+            frappe.prompt({ fieldname: "reason", fieldtype: "Small Text", reqd: 1, label: __("Motif"), description: help },
+                (v) => call(method, { reason: v.reason }), title, label);
+        }, __("Passerelle"));
+        if (frm.doc.status === "A approuver" && approver) {
+            withdraw(__("Annuler la demande"), "cancel_enrollment_request", __("Annuler la demande d'approbation"),
+                __("La cle recue est effacee. Le poste revient a l'etat Nouvelle : il faudra un nouveau code d'enrolement."));
+        }
+        if (frm.doc.status === "Active" && approver) {
+            withdraw(__("Rejeter l'approbation"), "reject_approval", __("Rejeter l'approbation du poste"),
+                __("Le poste s'arrete immediatement et sa cle est effacee. Il revient a l'etat Nouvelle : nouveau code d'enrolement puis nouvelle approbation. Les factures destinees au MCF attendent ou partent en secours."));
+        }
         if (["Active", "A approuver", "Code emis"].includes(frm.doc.status) && manager) {
             frm.add_custom_button(__("Revoquer"), () => {
                 frappe.prompt({ fieldname: "reason", fieldtype: "Small Text", reqd: 1, label: __("Motif") },

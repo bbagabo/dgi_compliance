@@ -96,22 +96,31 @@ def _qty(v):
     return txt.replace(",", " ").replace(".", ",").replace(" ", ".")
 
 
-def report_view(doc):
-    """Rows of the printed report, already formatted (layout of the DGI e-UF reports, SFE 1.3.3 / 1.4.2)."""
-    data = doc.get_data()
-    kind = CODES.get(doc.report_type, "X")
-    if kind == "A":
-        articles = data.get("articles") or []
-        summ = data.get("summary") or {}
-        return {"articles": [{
-            "code": a.get("code") or "", "name": a.get("name") or "", "price": _num(a.get("price")),
-            "group": a.get("group") or "", "rate": f"{flt(a.get('rate')):g} %",
-            "qty_sold": _qty(a.get("qty_sold")), "qty_returned": _qty(a.get("qty_returned")),
-            "stock": _qty(a.get("stock")) if a.get("stock") is not None else "n/a",
-            "amount": _num(a.get("amount"))} for a in articles],
-            "total": {"count": summ.get("count", len(articles)), "qty_sold": _qty(summ.get("qty_sold")),
-                      "qty_returned": _qty(summ.get("qty_returned")), "amount": _num(summ.get("amount"))}}
+def hide_zero_rows():
+    """Setting 'Masquer les lignes a zero dans les rapports X et Z' (v5.4.2; switched on at installation and
+    by the patch v5_4.rapports_par_pdv)."""
+    return bool(frappe.utils.cint(get_settings().get("report_hide_zero_rows")))
 
+
+def _nonzero(*values):
+    return any(abs(flt(v)) >= 0.005 for v in values)
+
+
+def _a_block(data):
+    articles = data.get("articles") or []
+    summ = data.get("summary") or {}
+    return {"articles": [{
+        "code": a.get("code") or "", "name": a.get("name") or "", "price": _num(a.get("price")),
+        "group": a.get("group") or "", "rate": f"{flt(a.get('rate')):g} %",
+        "qty_sold": _qty(a.get("qty_sold")), "qty_returned": _qty(a.get("qty_returned")),
+        "stock": _qty(a.get("stock")) if a.get("stock") is not None else "n/a",
+        "amount": _num(a.get("amount"))} for a in articles],
+        "total": {"count": summ.get("count", len(articles)), "qty_sold": _qty(summ.get("qty_sold")),
+                  "qty_returned": _qty(summ.get("qty_returned")), "amount": _num(summ.get("amount"))}}
+
+
+def _xz_block(data, hide_zero=False):
+    """Formatted rows of one scope. hide_zero: the rows without any amount or count are left out."""
     by_type = data.get("by_type") or {}
     by_type_group = data.get("by_type_group") or {}
     empty = {"count": 0, "incomplete": 0, "total": 0, "ht": 0, "vat": 0, "ts": 0}
@@ -125,8 +134,13 @@ def report_view(doc):
         groups = []
         for g in letters:
             v = groups_data.get(g) or {}
+            if hide_zero and not _nonzero(v.get("total"), v.get("ht"), v.get("vat"), v.get("ts")):
+                continue
             groups.append({"group": g, "total": _num(v.get("total")), "ht": _num(v.get("ht")),
                            "vat": _num(v.get("vat")), "ts": _num(v.get("ts"))})
+        if hide_zero and not groups and not _nonzero(s.get("count"), s.get("incomplete"), s.get("total"),
+                                                    s.get("ht"), s.get("vat"), s.get("ts")):
+            continue
         types.append({"type": t, "count": int(s.get("count") or 0), "incomplete": int(s.get("incomplete") or 0),
                       "total": _num(s.get("total")), "ht": _num(s.get("ht")), "vat": _num(s.get("vat")),
                       "ts": _num(s.get("ts")), "groups": groups})
@@ -134,12 +148,48 @@ def report_view(doc):
     return {
         "types": types,
         "payments": [{"label": p.get("label") or p.get("type"), "amount": _num(p.get("net"))}
-                     for p in data.get("payments") or []],
+                     for p in data.get("payments") or []
+                     if not hide_zero or _nonzero(p.get("sales"), p.get("credits"), p.get("net"))],
         "reductions": [{"type": t, "amount": _num((red.get(t) or {}).get("amount")),
-                        "tax": _num((red.get(t) or {}).get("tax"))} for t in fr.INVOICE_TYPES],
+                        "tax": _num((red.get(t) or {}).get("tax"))} for t in fr.INVOICE_TYPES
+                       if not hide_zero or _nonzero((red.get(t) or {}).get("amount"), (red.get(t) or {}).get("tax"))],
         "natures": [{"code": n.get("code"), "label": n.get("label"), "count": int(n.get("count") or 0),
-                     "total": _num(n.get("total"))} for n in data.get("natures") or []],
+                     "total": _num(n.get("total"))} for n in data.get("natures") or []
+                    if not hide_zero or _nonzero(n.get("count"), n.get("total"))],
     }
+
+
+def _identity(pv):
+    parts = [("Code magasin", pv.get("code")), ("NIM e-MCF", pv.get("nim")), ("MCF (NID)", pv.get("nid")),
+             ("Ville", pv.get("city"))]
+    return " – ".join(f"{k} {v}" for k, v in parts if v)
+
+
+def report_view(doc, hide_zero=None):
+    """Rows of the printed report, already formatted (layout of the DGI e-UF reports, SFE 1.3.3 / 1.4.2).
+
+    v5.4.2 - "blocks": one block per point de vente fiscal, then the synthesis of all of them. With a single
+    point de vente (or a report generated before v5.4.2) there is ONE block and no synthesis. The other keys
+    are the complete rows of the whole company (every type, every group), as before."""
+    data = doc.get_data()
+    kind = CODES.get(doc.report_type, "X")
+    hide_zero = hide_zero_rows() if hide_zero is None else hide_zero
+    make = _a_block if kind == "A" else (lambda d: _xz_block(d, hide_zero))
+    view = _a_block(data) if kind == "A" else _xz_block(data, False)
+    pvs = data.get("points_of_sale") or []
+    if len(pvs) > 1:
+        blocks = [dict(make(pv), heading=f"Point de vente : {pv.get('label') or pv.get('point_of_sale')}",
+                       identity=_identity(pv), synthesis=False) for pv in pvs]
+        blocks.append(dict(make(data), heading=f"Synthèse : tous les points de vente réunis ({len(pvs)})",
+                           identity="", synthesis=True))
+        view["point_of_sale"] = ""
+    else:
+        blocks = [dict(make(data), heading="", identity="", synthesis=False)]
+        pv = pvs[0] if pvs and pvs[0].get("point_of_sale") else {}
+        view["point_of_sale"] = " – ".join(x for x in (pv.get("label"), _identity(pv)) if x)
+    view["blocks"] = blocks
+    view["hide_zero"] = hide_zero
+    return view
 
 
 def dgi_report_context(doc):

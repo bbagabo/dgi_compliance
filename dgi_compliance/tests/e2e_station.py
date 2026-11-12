@@ -239,3 +239,29 @@ def gateway_state():
     row = frappe.db.get_value("DGI Gateway", GW, ["status", "key_fingerprint", "enrolled_by", "approved_by"], as_dict=True)
     events = frappe.get_all("DGI Gateway Event", filters={"gateway": GW}, pluck="event_code", order_by="creation desc", limit=12)
     print("GW=" + frappe.as_json(dict(row, events=events), indent=None))
+
+
+# ---------------------------------------------------------------- v5.4.2 : annulation / rejet (tests/js/e2e_retrait_542.js)
+def grant_approver(on=1):
+    """Give (or take back) the role DGI Approbateur to the cashier: two-user company."""
+    frappe.set_user("Administrator")
+    user = frappe.get_doc("User", CASHIER)
+    has = any(r.role == "DGI Approbateur" for r in user.roles)
+    if int(on) and not has:
+        user.append("roles", {"role": "DGI Approbateur"})
+        user.save(ignore_permissions=True)
+    elif not int(on) and has:
+        user.set("roles", [r for r in user.roles if r.role != "DGI Approbateur"])
+        user.save(ignore_permissions=True)
+    frappe.clear_cache(user=CASHIER)
+    frappe.db.commit()
+    print("APPROBATEUR=" + str(int(on)))
+
+
+def cancel_request(reason="Annulee par le responsable (e2e)"):
+    """The manager cancels the pending request from his own computer."""
+    frappe.set_user("Administrator")
+    from dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway import cancel_enrollment_request
+    res = cancel_enrollment_request(GW, reason)
+    frappe.db.commit()
+    print("CANCELLED=" + res["status"])

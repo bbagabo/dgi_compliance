@@ -382,6 +382,18 @@
    "description": "Les factures normalisees avant cette date ne recoivent pas de reference (elles ont deja ete imprimees sans)."
   },
   {
+   "fieldname": "sb_reports",
+   "fieldtype": "Section Break",
+   "label": "Rapports X / Z / A (v5.4.2)"
+  },
+  {
+   "fieldname": "report_hide_zero_rows",
+   "fieldtype": "Check",
+   "label": "Masquer les lignes a zero dans les rapports X et Z",
+   "default": "1",
+   "description": "Les rapports sont detailles par point de vente fiscal, puis une synthese de tous les points de vente (un seul point de vente : pas de synthese). Coche : les types de facture, groupes de taxation, types de paiement, reductions et natures d'avoir sans aucun montant ne sont pas imprimes. Decoche : toutes les lignes sont imprimees, comme sur le rapport e-UF de la DGI. Les donnees enregistrees dans le rapport sont completes dans les deux cas."
+  },
+  {
    "fieldname": "sb_cur",
    "label": "Currency Reconciliation (CDF)",
    "fieldtype": "Section Break",

@@ -208,6 +208,7 @@ class DGIStationPage {
 					<button class="btn btn-default btn-sm dgi-st-propose">${__("Proposer ce MCF")}</button>
 					<button class="btn btn-default btn-sm dgi-st-test">${__("Tester la connexion")}</button>
 					<button class="btn btn-danger btn-sm dgi-st-stop" style="display:none">${__("Arreter le poste")}</button>
+					<button class="btn btn-default btn-sm dgi-st-reject" style="display:none">${__("Rejeter l'approbation")}</button>
 				</div>
 			</div>
 			<div class="dgi-st-step" style="margin-top:12px"></div>
@@ -220,6 +221,35 @@ class DGIStationPage {
 		$s.find(".dgi-st-propose").on("click", () => this.propose_device());
 		$s.find(".dgi-st-test").on("click", () => this.test_connection());
 		$s.find(".dgi-st-stop").on("click", () => this.stop_session());
+		$s.find(".dgi-st-reject").on("click", () => this.withdraw("reject_approval"));
+	}
+
+	// v5.4.2: a DGI Fiscal Manager or a DGI Approbateur cancels the pending request of this poste, or rejects
+	// its approval. The server checks the role; the buttons are only shown to these roles.
+	can_approve() {
+		return frappe.user.has_role(["DGI Fiscal Manager", "DGI Approbateur", "System Manager"]);
+	}
+	withdraw(method) {
+		if (!this.gw) return;
+		const cancel = method === "cancel_enrollment_request";
+		const label = cancel ? __("Annuler la demande") : __("Rejeter l'approbation");
+		frappe.prompt({ fieldname: "reason", fieldtype: "Small Text", reqd: 1, label: __("Motif"),
+			description: cancel
+				? __("La cle de ce poste en attente est effacee. Le poste {0} revient a l'etat Nouvelle : il faudra un nouveau code d'enrolement.", [esc(this.gw.name)])
+				: __("Le poste {0} s'arrete immediatement et sa cle est effacee : nouveau code d'enrolement puis nouvelle approbation. Les factures destinees au MCF attendent ou partent en secours.", [esc(this.gw.name)]) },
+		async (v) => {
+			try {
+				await frappe.xcall("dgi_compliance.dgi_compliance.doctype.dgi_gateway.dgi_gateway." + method,
+					{ gateway: this.gw.name, reason: v.reason });
+				this.withdrawn_here = true;
+				await this.stop_session();
+				this.log(cancel ? __("Demande d'approbation annulee par {0}. Motif : {1}", [frappe.session.user, v.reason])
+					: __("Approbation du poste rejetee par {0}. Motif : {1}", [frappe.session.user, v.reason]));
+				this.alert(cancel ? __("La demande d'approbation du poste {0} est annulee.", [esc(this.gw.name)])
+					: __("L'approbation du poste {0} est rejetee : le poste est arrete.", [esc(this.gw.name)]), "warning");
+				await this.next_step();
+			} catch (e) { this.alert(esc(err_text(e)), "danger"); }
+		}, label, label);
 	}
 
 	async select(gateway_id, auto) {
@@ -250,6 +280,15 @@ class DGIStationPage {
 				.text(`${fresh.name} - ${fresh.point_of_sale} (${__(fresh.status)})`);
 		}
 		this.render_cards();
+		// v5.4.2: the request of this poste was cancelled (or its approval rejected) by an approver
+		const was = this.last_status;
+		this.last_status = this.gw.status;
+		if (["A approuver", "Active"].includes(was) && ["Nouvelle", "Code emis"].includes(this.gw.status) && !this.withdrawn_here) {
+			this.alert(was === "A approuver"
+				? __("La demande d'approbation du poste {0} a ete annulee par un responsable (DGI Fiscal Manager ou DGI Approbateur). Demandez un nouveau code d'enrolement pour recommencer.", [esc(this.gw.name)])
+				: __("L'approbation du poste {0} a ete rejetee par un responsable (DGI Fiscal Manager ou DGI Approbateur). Demandez un nouveau code d'enrolement pour recommencer.", [esc(this.gw.name)]), "warning");
+		}
+		this.withdrawn_here = false;
 		const fp = this.identity ? await this.identity.fingerprint() : null;
 		if (this.gw.status === "Active" && this.identity && fp === this.gw.key_fingerprint) {
 			return this.start_session();
@@ -270,7 +309,9 @@ class DGIStationPage {
 			$step.html(`<div class="alert alert-${mine ? "info" : "danger"}">
 				${mine ? __("En attente d'approbation. Empreinte de la cle de ce navigateur :") : __("La cle en attente d'approbation n'est PAS celle de ce navigateur. Prevenez le responsable fiscal.")}
 				<div style="font-size:22px;letter-spacing:2px;font-weight:700;margin:8px 0">${esc(fp || this.gw.key_fingerprint)}</div>
-				${__("Une autre personne que vous (DGI Fiscal Manager ou DGI Approbateur) compare cette empreinte dans ERPNext puis approuve le poste. Cette page demarre seule apres l'approbation.")}</div>`);
+				${__("Une autre personne que vous (DGI Fiscal Manager ou DGI Approbateur) compare cette empreinte dans ERPNext puis approuve le poste. Cette page demarre seule apres l'approbation.")}
+				${this.can_approve() ? `<div style="margin-top:10px"><button class="btn btn-default btn-sm dgi-st-cancel-request">${__("Annuler la demande")}</button></div>` : ""}</div>`);
+			$step.find(".dgi-st-cancel-request").on("click", () => this.withdraw("cancel_enrollment_request"));
 			clearTimeout(this.wait_timer);
 			this.wait_timer = setTimeout(() => this.next_step(), 10000);
 			return;
@@ -633,6 +674,7 @@ class DGIStationPage {
 		});
 		this.auth_failures = 0;
 		$btn.show();
+		$(this.page.body).find(".dgi-st-reject").toggle(this.can_approve());
 		this.alert("");
 		this.log(__("Poste {0} demarre (operateur {1}).", [this.gw.name, frappe.session.user]));
 		this.renew_timer = setInterval(() => this.renew_token(), 6 * 3600 * 1000);
@@ -709,7 +751,7 @@ class DGIStationPage {
 				}
 			}
 		}
-		$(this.page.body).find(".dgi-st-stop").hide();
+		$(this.page.body).find(".dgi-st-stop, .dgi-st-reject").hide();
 		this.render_cards();
 	}
 
