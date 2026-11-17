@@ -44,6 +44,17 @@ def _response(doc):
         return {}
 
 
+def mcf_operator_code(doc) -> str:
+    """Operator code recorded by the MCF (16 characters at most), kept in the stored request. Printed in place
+    of the ERPNext user so that the invoice shows what the DGI holds (v5.4.3: custom_dgi_operator is now the
+    User, no longer the MCF code)."""
+    if doc.get("custom_dgi_channel") != "MCF":
+        return ""
+    request = _response(doc).get("request")
+    operator = request.get("operator") if isinstance(request, dict) else None
+    return str(operator.get("id") or "") if isinstance(operator, dict) else ""
+
+
 def _company_ccy(doc):
     return frappe.get_cached_value("Company", doc.company, "default_currency") or "CDF"
 
@@ -366,7 +377,7 @@ def dgi_invoice_context(doc):
             comments.append({"label": label, "value": val})
 
     count = int(doc.get("custom_dgi_print_count") or 0)
-    operator_id = doc.get("custom_dgi_operator") or doc.get("owner") or ""
+    operator_id = mcf_operator_code(doc) or doc.get("custom_dgi_operator") or doc.get("owner") or ""
     operator_name = doc.get("custom_dgi_operator_name") or frappe.utils.get_fullname(operator_id) or operator_id
     posting_time = format_time(doc.get("posting_time")) if doc.get("posting_time") else ""
 

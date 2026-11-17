@@ -301,6 +301,20 @@ def _check_counter(op, data, device):
         device.db_set("last_tc", tc, update_modified=False)
 
 
+def operator_user(op) -> str | None:
+    """ERPNext user to store in custom_dgi_operator (a Link to User).
+
+    The MCF only keeps a 16-character operator code (payload operator.id: 'b.olinga' for
+    'b.olinga@helosystems.com'); that code is not a User name, and writing it into the Link field made the
+    normalized invoice impossible to submit ("Impossible de trouver Operateur DGI"). The user is the one who
+    asked for the normalization, else the creator of the invoice (v5.4.3)."""
+    owner = frappe.db.get_value("Sales Invoice", op.sales_invoice, "owner") if op.get("sales_invoice") else None
+    for user in (op.get("requested_by"), owner):
+        if user and user != "Guest" and frappe.db.exists("User", user):
+            return user
+    return None
+
+
 def apply_to_invoice(op, data):
     from dgi_compliance.edef.audit import log_exchange
     from dgi_compliance.edef.qr import make_qr_data_uri
@@ -318,7 +332,7 @@ def apply_to_invoice(op, data):
         "custom_dgi_qr_image": make_qr_data_uri(qr),
         "custom_dgi_error": None,
         "custom_dgi_normalized_on": now_datetime(),
-        "custom_dgi_operator": operator.get("id"),
+        "custom_dgi_operator": operator_user(op),          # v5.4.3: a User, never the MCF code
         "custom_dgi_operator_name": operator.get("name"),
         "custom_dgi_payload_hash": op.payload_hash,
         "custom_dgi_channel": CHANNEL_MCF,
