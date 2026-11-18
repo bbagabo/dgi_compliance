@@ -1,4 +1,4 @@
-"""In-memory MCF simulator implementing the MCF-SFE v1.0 protocol (for tests and demos).
+"""In-memory MCF simulator implementing the MCF-SFE protocol v1 or v2 (for tests and demos).
 
 It behaves like a Transport: the gateway writes command frames, the simulator executes them
 and queues the response bytes. Faults can be injected to reproduce field incidents:
@@ -11,7 +11,9 @@ and queues the response bytes. Faults can be injected to reproduce field inciden
 * online = False              -> no DGI connection: credit notes cannot be verified;
 * reject_fx = True            -> C0h with an exchange rate answers E: IFU (ELTRADE behaviour);
 * subtotal_layout = 'eltrade' | 'spec' (36/35 fields with 16 groups);
-* groups = 16 (protocol v1.0, A-P) or 19..26 (updated MCF, FACNO v2.0 groups announced by C1h);
+* groups = 16 (protocol v1.0, A-P) or 19..26 (interim firmware: more groups inline in C1h and 33h);
+* protocol = 2 -> MCF-SFE v2: 26 groups; C1h / 33h answer A-P without data or with ST1, Q-Z with ST2;
+* st2_refused = True (protocol 1) -> C1h / 33h ST2 answer E: (else the data is ignored, like a v1 MCF);
 * extra_payment_letters = ('R',) -> 35h letters accepted besides E V C M D A (credit, H5).
 """
 import hashlib
@@ -24,10 +26,12 @@ from .device import LinkError, Transport
 class MCFSimulator(Transport):
     def __init__(self, nid="SIM0000001", nif="A0700190Q", *, acnt=1, rates=None,
                  subtotal_layout="eltrade36", fn_sig_order="sig_fn", name="SIM", groups=16,
-                 extra_payment_letters=()):
+                 extra_payment_letters=(), protocol=1, st2_refused=False):
         self.name = name
         self.nid, self.acnt, self.nif = nid, acnt, nif
-        self.letters = P.TAX_LETTERS[:groups]
+        self.protocol = protocol
+        self.st2_refused = st2_refused
+        self.letters = P.TAX_LETTERS if protocol == 2 else P.TAX_LETTERS[:groups]
         self.rates = {letter: 0.0 for letter in self.letters}
         self.rates.update({k: v for k, v in (rates or {"B": 16.0, "C": 5.0, "O": 1.0, "P": 0.0}).items()
                            if k in self.letters})
@@ -125,8 +129,14 @@ class MCFSimulator(Transport):
             return "E:COMMANDE INCONNUE"
         return handler(data)
 
-    def _c1(self, _data):
-        rates = ",".join("%.2f" % self.rates[x] for x in self.letters)
+    def _c1(self, data):
+        if data == P.ST2:
+            if self.protocol == 2:
+                return ",".join("%.2f" % self.rates[x] for x in P.ST2_LETTERS)
+            if self.st2_refused:
+                return "E:COMMANDE NON VALIDE"
+        letters = P.HISTORIC_LETTERS if self.protocol == 2 else self.letters
+        rates = ",".join("%.2f" % self.rates[x] for x in letters)
         return ",".join([self.mid, self.nif, self._now(), str(self.tc), str(self.fvc), str(self.frc),
                          self.last["dt"], self.last["ft"], self.last["sig"],
                          P.escape_text(self.last["fn"]), "%.2f" % self.last["mv"], rates])
@@ -225,12 +235,19 @@ class MCFSimulator(Transport):
         mt = round(sum(v for _, v in groups.values()), 2)
         return mv, mt, groups
 
-    def _33(self, _data):
+    def _33(self, data):
         if self._inv is None:
             return "E:AUCUNE FACTURE OUVERTE"
         mv, mt, groups = self._totals()
-        mva = ["%.2f" % groups.get(x, (0.0, 0.0))[0] for x in self.letters]
-        mta = ["%.2f" % groups.get(x, (0.0, 0.0))[1] for x in self.letters]
+        if data == P.ST2:
+            if self.protocol == 2:
+                return ",".join(["%.2f" % groups.get(x, (0.0, 0.0))[0] for x in P.ST2_LETTERS]
+                                + ["%.2f" % groups.get(x, (0.0, 0.0))[1] for x in P.ST2_LETTERS])
+            if self.st2_refused:
+                return "E:COMMANDE NON VALIDE"
+        letters = P.HISTORIC_LETTERS if self.protocol == 2 else self.letters
+        mva = ["%.2f" % groups.get(x, (0.0, 0.0))[0] for x in letters]
+        mta = ["%.2f" % groups.get(x, (0.0, 0.0))[1] for x in letters]
         fields = ["%.2f" % mv] + (["%.2f" % mt] if self.subtotal_layout.startswith("eltrade") else []) \
             + mva + mta + ["%.2f" % self._inv["ts"], "0"]
         return ",".join(fields)

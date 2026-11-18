@@ -5,9 +5,9 @@ channels share the fiscal rules of v5.0.5 (tax-group and payment mappings, disco
 notes, comments A-H, exchange rate typed on the invoice). The gateway only encodes and executes.
 
 Guards specific to the MCF protocol (refused BEFORE anything reaches the device):
-  * tax groups: A-Z (FACNO v2.0). The DGI updated the groups without updating the protocol
-    document; an updated MCF announces its groups in C1h (H6). When the groups of the MCF are known
-    (last heartbeat), a group it does not know is refused here with a clear message;
+  * tax groups (specifications v2, October 2026): A-S applicable, T-Z reserved (refused). An MCF of
+    protocol v2 gives Q-Z through C1h ST2, an MCF of protocol v1 only A-P. When the groups of the MCF
+    are known (last heartbeat), a group it does not know is refused here with a clear message;
   * CREDIT payment: declared on the MCF as on the e-MCF (H5, DGI). Protocol v1.0 does not document
     the 35h letter: the letter of the updated MCF is configured in DGI Compliance Settings;
   * currency other than USD: C0h only carries a USD rate (CRT/CDT).
@@ -18,6 +18,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_datetime
 
+from dgi_compliance.edef.calc import HISTORIC_GROUPS, is_reserved_group
 from dgi_compliance.edef.mapper import build_invoice_request, validate_invoice_request
 
 PAYMENT_LETTERS = {"ESPECES": "E", "VIREMENT": "V", "CARTEBANCAIRE": "C", "MOBILEMONEY": "M",
@@ -107,13 +108,15 @@ def build_mcf_invoice(doc, settings, route) -> tuple[dict, dict]:
     items = []
     for i, src in enumerate(dto["items"], start=1):
         letter = (src.get("taxGroup") or "").upper()
-        if len(letter) != 1 or letter not in MCF_GROUPS:
-            frappe.throw(_("Ligne {0} : groupe de taxation {1} invalide.").format(i, letter or "?"),
+        if len(letter) != 1 or letter not in MCF_GROUPS or is_reserved_group(letter):
+            frappe.throw(_("Ligne {0} : groupe de taxation {1} invalide (groupes applicables A a S).").format(i, letter or "?"),
                          exc=MCFPayloadError, title=_("Normalisation MCF"))
         if device_groups and letter not in device_groups:
+            v1 = device_groups <= set(HISTORIC_GROUPS)
             frappe.throw(_("Ligne {0} : le MCF {1} ne connait que les groupes {2}. Le groupe {3} demande la mise a "
-                           "jour du MCF (groupes FACNO v2.0).").format(i, route.device, "".join(sorted(device_groups)),
-                                                                       letter),
+                           "jour du MCF{4}.").format(i, route.device, "".join(sorted(device_groups)), letter,
+                                                     _(" au protocole MCF-SFE v2 (commandes C1h et 33h avec ST2)")
+                                                     if v1 else ""),
                          exc=MCFPayloadError, title=_("Normalisation MCF"))
         qty = flt(src.get("quantity") or 1)
         price = flt(src.get("price") or 0)

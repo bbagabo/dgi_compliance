@@ -31,7 +31,8 @@ def handle(req):
                                        rates=req.get("rates"), groups=req.get("groups", 16),
                                        subtotal_layout=req.get("layout", "eltrade36"),
                                        fn_sig_order=req.get("fn_sig_order", "sig_fn"),
-                                       extra_payment_letters=tuple(req.get("extra_payment_letters") or ()))
+                                       extra_payment_letters=tuple(req.get("extra_payment_letters") or ()),
+                                       protocol=req.get("protocol", 1), st2_refused=req.get("st2_refused", False))
         return {"ok": True}
     sim = sims.get(req.get("id"))
     if op == "write":

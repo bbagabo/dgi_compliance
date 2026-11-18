@@ -51,6 +51,14 @@ def classify_refusal(text: str):
     return "REFUS_MCF", False, "Le MCF a refuse la commande."
 
 
+def unknown_group_message(letter: str, known, protocol=None) -> str:
+    groups = "".join(sorted(known))
+    if letter in P.ST2_LETTERS and protocol != 2:
+        return (f"Le MCF repond au protocole MCF-SFE v1 (groupes {groups}) : le groupe {letter} demande la mise a "
+                f"jour du MCF au protocole v2 (commandes C1h et 33h avec ST2, specifications DGI d'octobre 2026).")
+    return f"Le MCF ne connait que les groupes {groups} : le groupe {letter} demande la mise a jour du MCF."
+
+
 class WrongDevice(Exception):
     def __init__(self, code: str, message: str, status: dict | None = None):
         self.code, self.status = code, status or {}
@@ -159,10 +167,15 @@ class Executor:
         known = st.get("tax_rates") or {}
         for it in inv["items"]:
             letter = it["tax_group"]
+            if letter in P.RESERVED_LETTERS:
+                res = self._result(op, "rejected", code="GROUPE_RESERVE", proven=True,
+                                   message=(f"Groupe {letter} reserve par la DGI (groupes T a Z) : aucun article ne "
+                                            f"peut y etre enregistre."))
+                self.journal.set_state(op["operation_id"], "REJECTED", result=res)
+                return res
             if known and letter not in known:
                 res = self._result(op, "rejected", code="GROUPE_INCONNU_MCF", proven=True,
-                                   message=(f"Le MCF ne connait que les groupes {''.join(sorted(known))} : le groupe "
-                                            f"{letter} demande la mise a jour du MCF (groupes FACNO v2.0)."))
+                                   message=unknown_group_message(letter, known, st.get("protocol")))
                 self.journal.set_state(op["operation_id"], "REJECTED", result=res)
                 return res
             if letter in st.get("tax_rates", {}) and abs(st["tax_rates"][letter] - float(it["tax_rate"])) > 0.001:

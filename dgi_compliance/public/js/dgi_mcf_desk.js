@@ -113,7 +113,7 @@
 		const mcf = mcf_date(st.dt);
 		const obs = {
 			mid: st.mid, nid: st.nid, nif: st.nif, dt: st.dt, tc: st.tc, fvc: st.fvc, frc: st.frc,
-			group_count: st.group_count, tax_rates: st.tax_rates, flags: st.flags || [], invoice_open: !!st.invoice_open,
+			group_count: st.group_count, tax_rates: st.tax_rates, protocol: st.protocol || 1, flags: st.flags || [], invoice_open: !!st.invoice_open,
 			last_invoice: st.dfn || "", dgi: srv, port, elapsed_ms,
 			clock_offset_s: mcf && pc_epoch ? Math.round((mcf.getTime() - pc_epoch) / 1000) : null,
 		};
@@ -126,12 +126,12 @@
 
 	function read_table(read) {
 		const { st, srv, port } = read;
-		const rates = Object.entries(st.tax_rates || {}).map(([g, r]) => `${g} ${r}%`).join(" · ");
+		const gs = window.DGIMCF.groupsSummary(st);
 		const rows = [
 			[__("Port"), esc(port)], [__("MID (NID-activation)"), esc(st.mid)], [__("NIF du MCF"), esc(st.nif)],
 			[__("Date du MCF"), esc(mcf_dt_user(st.dt))],
 			[__("Compteurs (total / ventes / avoirs)"), esc(`${st.tc} / ${st.fvc} / ${st.frc}`)],
-			[__("Groupes de taxation ({0})", [st.group_count]), esc(rates)],
+			[__("Groupes de taxation ({0})", [st.group_count]), `${esc(gs.rates)} <small class="${gs.v1 ? "text-danger" : "text-muted"}">(${esc(__(gs.note))})</small>`],
 			[__("Connexion DGI (C2h)"), c2h_html(srv, st.dt)],
 		];
 		return `<table class="table table-bordered table-sm small">${rows.map(([k, v]) =>

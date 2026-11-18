@@ -47,6 +47,7 @@ ITEM_TAX = {
     "DGI B 16": ("B", {"16": 16}),
     "DGI C 5": ("C", {"5": 5}),
     "DGI Q 8": ("Q", {"8": 8}),
+    "DGI R 8": ("R", {"8": 8}),
     "DGI O 1": ("O", {"1": 1}),
     "DGI A Exonere": ("A", {"16": 0}),
     "DGI D Derogatoire": ("D", {"16": 0}),
@@ -67,6 +68,9 @@ ITEMS = [
     ("DGI-E-CAFE", "Cafe vert export", "DGI E Export", 1, "BIE", None, 0),
     ("DGI-TS-BIERE", "Biere 65cl (taxe specifique)", "DGI B 16", 1, "BIE", "230", 0),
     ("DGI-B-VRAC", "Sucre en vrac (kg)", "DGI B 16", 1, "BIE", None, 0),
+    # v5.5.0 (specifications v2): group R and an item hors champ mapped directly to S
+    ("DGI-R-MARCHE", "Fourniture marche public (8 %)", "DGI R 8", 0, "SER", None, 0),
+    ("DGI-S-HC", "Frais hors champ TVA", "DGI S Hors champ", 0, "SER", None, 1),
 ]
 
 CUSTOMERS = [

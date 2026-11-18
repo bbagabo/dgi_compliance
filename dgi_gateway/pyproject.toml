@@ -1,6 +1,6 @@
 [project]
 name = "dgi-gateway"
-version = "0.2.0"
+version = "0.3.0"
 description = "Passerelle fiscale de site : MCF physique (protocole MCF-SFE v1.0, DGI RDC) <-> ERPNext dgi_compliance"
 authors = [{ name = "DGI Compliance" }]
 requires-python = ">=3.10"

@@ -112,9 +112,11 @@ CUSTOMER_TYPES_V4 = {
 _REQ_ORDER = ["req_bill_to_name", "req_vat_reg_no", "req_contact", "req_address",
               "req_phone", "req_email", "req_registration_no"]
 
-TAX_GROUPS = list("ABCDEFGHIJKLMNOPQRS")
+TAX_GROUPS = list("ABCDEFGHIJKLMNOPQRS")          # 19 applicable groups (specifications v2)
+RESERVED_TAX_GROUPS = list("TUVWXYZ")              # "Reserve 1..7": present, inactive, never usable
 
-# RDC FACNO - Groupes de taxation v2.0 (octobre 2026): code -> (description, rate %, is_vat)
+# RDC FACNO - Groupes de taxation v2.0 (octobre 2026), Note de service n°01/209 (SFE 1.1.12):
+# code -> (description, rate %, is_vat). Groups T-Z are reserved (RESERVED_TAX_GROUPS).
 TAX_GROUPS_FACNO = {
     "A": ("Exonere", 0, 0),
     "B": ("Taxable 16%", 16, 1),
@@ -174,6 +176,10 @@ def seed_mapping_doctypes(force: bool = False) -> dict:
         counts["tax_groups"] += _insert_if_missing(
             "DGI Tax Group", code, {"code": code, "description": desc, "rate": rate, "is_vat": is_vat,
                                     "is_active": 1, "source": "Static"})
+    for n, code in enumerate(RESERVED_TAX_GROUPS, start=1):
+        counts["tax_groups"] += _insert_if_missing(
+            "DGI Tax Group", code, {"code": code, "description": f"Reserve {n}", "rate": 0, "is_vat": 0,
+                                    "is_active": 0, "is_reserved": 1, "source": "Static"})
     frappe.db.commit()
     return counts
 

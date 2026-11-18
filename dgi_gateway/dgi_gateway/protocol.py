@@ -1,4 +1,13 @@
-"""MCF-SFE protocol v1.0 (DGI RDC): framing, escaping, command data and response parsing.
+"""MCF-SFE protocol v2 (DGI RDC, October 2026): framing, escaping, command data and response parsing.
+
+Protocol v2 (Annexe Protocoles MCF-SFE v2.0, guide de migration v2): 26 tax groups A-Z.
+  C1h  no data or ST1 -> MID..DMV + rates of the historical groups A-P (unchanged)
+       ST2            -> rates of the groups Q-Z (TAXQ..TAXZ)
+  33h  no data or ST1 -> MV, MVA..MVP, MTA..MTP, MTTS, MCUR (unchanged)
+       ST2            -> MVQ..MVZ, MTQ..MTZ
+  31h  TAX accepts a letter A-Z.
+An MCF still in protocol v1 answers ST2 with its usual answer (or refuses it): it only knows A-P. The
+interim firmware that lists more groups inline in C1h/33h (observed before v2) is still read.
 
 Pure functions only (no I/O) so that they can be tested without a device.
 
@@ -37,10 +46,15 @@ COMMAND_NAMES = {
 MAX_DATA = 200
 STA_LEN = 6
 SEQ_MIN, SEQ_MAX = 0x20, 0xFF
-# FACNO v2.0: groups A-Z. Protocol v1.0 documents A-P; an updated MCF reports more groups in C1h
-# (H6, confirmed by the DGI): the number of groups is read from the device, never assumed.
+# FACNO groupes de taxation v2.0: 26 letters, 19 applicable (A-S), T-Z reserved (no item may be recorded).
+# The groups of an MCF are read from the device (C1h, then C1h ST2), never assumed.
 TAX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 PROTOCOL_V1_GROUPS = 16
+HISTORIC_LETTERS = TAX_LETTERS[:PROTOCOL_V1_GROUPS]     # A-P: C1h / 33h without data or with ST1
+ST2_LETTERS = TAX_LETTERS[PROTOCOL_V1_GROUPS:]          # Q-Z: C1h / 33h with ST2
+APPLICABLE_LETTERS = TAX_LETTERS[:19]                    # A-S
+RESERVED_LETTERS = "TUVWXYZ"                             # "Reserve 1..7"
+ST1, ST2 = "ST1", "ST2"
 SALE_TYPES = ("FV", "FT", "EV", "ET")
 CREDIT_TYPES = ("FA", "EA")
 CREDIT_NATURES = ("COR", "RAN", "RAM", "RRR")
@@ -249,6 +263,37 @@ def parse_status(text: str) -> dict:
     return out
 
 
+def _is_number(value: str) -> bool:
+    try:
+        float(str(value).strip())
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def parse_status_st2(text: str) -> dict:
+    """C1h ST2 (protocol v2): TAXQ,TAXR,...,TAXZ -> {letter: rate}. An MCF of protocol v1 does not know
+    ST2: it refuses it or answers its usual C1h (MID,...). Both raise ProtocolError."""
+    kind, payload = classify(text)
+    if kind == "E":
+        raise ProtocolError(f"C1h ST2 refusee par le MCF : {payload or text}")
+    f = split_fields(text)
+    if not f or len(f) > len(ST2_LETTERS) or not all(x != "" and _is_number(x) for x in f):
+        raise ProtocolError(f"C1h ST2 : reponse du protocole v1 ou illisible ({len(f)} champs)")
+    return {ST2_LETTERS[i]: to_float(v) for i, v in enumerate(f)}
+
+
+def merge_status_st2(st: dict, rates_q_z: dict) -> dict:
+    """C1h (A-P) + C1h ST2 (Q-Z) -> one status with every group of the MCF (protocol v2)."""
+    out = dict(st)
+    rates = {k: v for k, v in (st.get("tax_rates") or {}).items() if k in HISTORIC_LETTERS}
+    rates.update(rates_q_z)
+    out["tax_rates"] = rates
+    out["group_count"] = PROTOCOL_V1_GROUPS + len(rates_q_z)
+    out["protocol"] = 2
+    return out
+
+
 def parse_server_status(text: str) -> dict:
     """C2h: EC,DC,DT,STA[,ER]"""
     f = split_fields(text)
@@ -297,6 +342,40 @@ def parse_subtotal(text: str, group_count: int | None = None) -> dict:
     return {"mv": round(mv, 2), "mt": round(mt_total if mt_total is not None else mt_sum, 2),
             "mts": round(f[base + 2 * g], 2), "mcur": round(f[base + 2 * g + 1], 2),
             "groups": groups, "layout": f"{layout}{len(f)}", "group_count": g}
+
+
+def parse_subtotal_st2(text: str) -> dict:
+    """33h ST2 (protocol v2): MVQ..MVZ, MTQ..MTZ (amounts with VAT, then VAT, of the groups Q-Z)."""
+    kind, payload = classify(text)
+    if kind == "E":
+        raise ProtocolError(f"33h ST2 refusee par le MCF : {payload or text}")
+    raw = split_fields(text)
+    if not raw or len(raw) % 2 or len(raw) > 2 * len(ST2_LETTERS) or not all(_is_number(x) for x in raw):
+        raise ProtocolError(f"sous-total 33h ST2 illisible ({len(raw)} champs)")
+    f = [to_float(x) for x in raw]
+    g = len(f) // 2
+    groups = {}
+    for i in range(g):
+        total, vat = f[i], f[g + i]
+        if total or vat:
+            groups[ST2_LETTERS[i]] = {"total": round(total, 2), "vat": round(vat, 2)}
+    return {"groups": groups, "group_count": g, "layout": f"st2-{len(f)}"}
+
+
+def merge_subtotal(sub: dict, st2: dict) -> dict:
+    """33h (A-P) + 33h ST2 (Q-Z). MV is the invoice total given by the MCF; without an MT field (layout of
+    the specification) the VAT total is the sum of the VAT of ALL the groups, Q-Z included: it is the
+    amount 38h expects. The ELTRADE layout gives its own MT, kept as the MCF's statement."""
+    out = dict(sub)
+    groups = {k: v for k, v in (sub.get("groups") or {}).items() if k in HISTORIC_LETTERS}
+    groups.update(st2.get("groups") or {})
+    out["groups"] = groups
+    if not str(sub.get("layout") or "").startswith("eltrade"):
+        out["mt"] = round(sum(x["vat"] for x in groups.values()), 2)
+    out["group_count"] = PROTOCOL_V1_GROUPS + int(st2.get("group_count") or 0)
+    out["layout"] = f"{sub.get('layout')}+{st2.get('layout')}"
+    out["protocol"] = 2
+    return out
 
 
 def parse_payment(text: str) -> float:

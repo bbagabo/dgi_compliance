@@ -1,4 +1,4 @@
-"""In-process simulator of the DGI e-MCF API (API e-MCF v1.3) for automated tests.
+"""In-process simulator of the DGI e-MCF API (API e-MCF v2.0: rates ta..tp and trq..trz, ts = specific tax) for automated tests.
 
 It replaces `requests.request` inside dgi_compliance.edef.client and reproduces the documented
 behaviour: pending requests (max 10, error 63 on a duplicate invoice number), recomputation of
@@ -18,6 +18,14 @@ import requests
 
 RATES = {"A": 0, "B": 16, "C": 5, "D": 0, "E": 0, "F": 16, "G": 5, "H": 0, "I": 0, "J": 0, "K": 0,
          "L": 0, "M": 0, "N": 0, "O": 1, "P": 1, "Q": 8, "R": 8, "S": 0}
+RESERVED = "TUVWXYZ"          # API e-MCF v2: groups listed by /api/info/taxGroups, never usable
+API_VERSION = "2.0"
+
+
+def rate_field(letter):
+    """API e-MCF v2: ta..tp for A-P, trq..trz for Q-Z ('ts' is the specific tax)."""
+    low = letter.lower()
+    return ("t" + low) if low <= "p" else ("tr" + low)
 NIM = "CD01005082-1"
 
 
@@ -83,8 +91,8 @@ class EMCFSimulator:
             a["amount"] = _r2(a["amount"] + _r2(float(it["price"]) * float(it["quantity"])))
             a["ts"] = _r2(a["ts"] + float(it.get("taxSpecificAmount") or 0))
         out = {"total": 0.0, "vtotal": 0.0, "ts": 0.0}
-        for letter in "abcdefghijklmnopqrs":
-            out["t" + letter] = RATES[letter.upper()]
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            out[rate_field(letter)] = RATES.get(letter, 0)
         for g, a in acc.items():
             r = RATES[g]
             if mode == "ttc":
@@ -122,7 +130,7 @@ class EMCFSimulator:
         if not (req.get("operator") or {}).get("name"):
             return self._error(13, "Les informations de l'operateur sont manquantes")
         for it in items:
-            if it.get("taxGroup") not in RATES:
+            if it.get("taxGroup") not in RATES:      # T-Z reserved: refused like an unknown group
                 return self._error(9, "La groupe de taxation au niveau des articles n'est pas valide")
             if not (it.get("name") or "").strip():
                 return self._error(15, "Le nom de l'article ne peut pas etre vide")
@@ -170,14 +178,14 @@ class EMCFSimulator:
     def _route(self, method, path, body):
         if method == "GET" and path.rstrip("/") == "/api/info/status":
             return FakeResponse(200, {
-                "status": True, "version": "1.3", "nif": "A0700190Q", "nim": NIM,
+                "status": True, "version": API_VERSION, "nif": "A0700190Q", "nim": NIM,
                 "tokenValid": "2027-06-30T23:59:59+01:00", "serverDateTime": datetime.now().isoformat(),
                 "emcfList": [{"nim": NIM, "status": "Actif", "shopName": "MAGASIN GOMBE",
                               "address1": "19284/4b, Avenue des Poids Lourds", "address2": "Kingabwa/Limete",
                               "address3": "Kinshasa", "contact1": "+243815105198",
                               "contact2": "shop@dgitest.cd", "contact3": ""}]})
         if method == "GET" and path.rstrip("/") == "/api/info/taxGroups":
-            return FakeResponse(200, {k.lower(): v for k, v in RATES.items()})
+            return FakeResponse(200, dict({k.lower(): v for k, v in RATES.items()}, **{k.lower(): 0 for k in RESERVED}))
         if method == "GET" and path.rstrip("/") == "/api/info/currencyRates":
             return FakeResponse(200, [{"type": "USD", "description": "Dollar americain",
                                        "date": "2026-10-17T08:00:00+01:00", "rate": 2850.0}])
@@ -187,7 +195,7 @@ class EMCFSimulator:
         if path.rstrip("/") == "/api/invoice":
             if method == "GET":
                 return FakeResponse(200, {
-                    "status": True, "version": "1.3", "nif": "A0700190Q", "nim": NIM,
+                    "status": True, "version": API_VERSION, "nif": "A0700190Q", "nim": NIM,
                     "pendingRequestsCount": len(self.pending),
                     "pendingRequestsList": [{"date": datetime.now().isoformat(), "uid": u} for u in self.pending]})
             if method == "POST":

@@ -84,7 +84,7 @@
    "fieldname": "tax_group",
    "label": "Groupe de taxe",
    "fieldtype": "Select",
-   "options": "Any\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ",
+   "options": "Any\nA\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS",
    "default": "Any",
    "depends_on": "eval:doc.matrix_type=='D - Item Type / Tax Group'"
   },

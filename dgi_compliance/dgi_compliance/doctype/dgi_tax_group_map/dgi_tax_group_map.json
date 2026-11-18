@@ -41,12 +41,13 @@
   },
   {
    "fieldname": "edef_tax_group",
-   "label": "e-DEF Tax Group (A-Z)",
+   "label": "Groupe de taxation DGI (A-S)",
    "fieldtype": "Select",
-   "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ",
+   "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS",
    "in_list_view": 1,
    "columns": 2,
-   "reqd": 1
+   "reqd": 1,
+   "description": "Groupes applicables A a S (specifications v2). T a Z sont reserves par la DGI."
   }
  ],
  "permissions": []

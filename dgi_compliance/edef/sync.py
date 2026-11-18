@@ -303,6 +303,14 @@ def scheduled_sync():
         frappe.log_error(title="[DGI] Sync referentiels - erreurs", message=frappe.as_json(summary))
 
 
+def api_v2(version) -> bool:
+    """True for an e-MCF API 2.x (specifications v2, October 2026)."""
+    try:
+        return int(str(version).strip().lstrip("vV").split(".")[0]) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
 @frappe.whitelist()
 def test_connection() -> dict:
     """Live connectivity check against /api/info/status. Used by the 'Tester la connexion' button."""
@@ -312,6 +320,12 @@ def test_connection() -> dict:
         frappe.throw("Aucun jeton e-DEF configure dans DGI Compliance Settings.")
     res = client.info_status()
     data = res.get("data") if isinstance(res.get("data"), dict) else {}
+    version = str(data.get("version") or "").strip()
+    warning = None
+    if version and not api_v2(version):
+        warning = ("L'e-MCF annonce l'API {0}. Les specifications DGI d'octobre 2026 utilisent l'API e-MCF 2.0 "
+                   "(groupes Q a S, taux trq..trz) : verifiez l'URL et le jeton, ou demandez a la DGI la date de "
+                   "bascule.").format(version)
     return {
         "ok": bool(res.get("ok")),
         "status_code": res.get("status"),
@@ -319,6 +333,8 @@ def test_connection() -> dict:
         "nif": data.get("nif"),
         "nim": data.get("nim"),
         "version": data.get("version"),
+        "api_v2": api_v2(version) if version else None,
+        "warning": warning,
         "tokenValid": data.get("tokenValid"),
         "serverDateTime": data.get("serverDateTime"),
         "pos_count": len(data.get("emcfList") or []),

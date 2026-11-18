@@ -118,6 +118,7 @@ class GatewayService:
                 srv = self.dev.server_status()
                 snap.update({"mid": st["mid"], "nid": st["nid"], "nif": st["nif"], "tc": st["tc"],
                              "last_invoice": st["dfn"], "last_sig": st["dfs"], "tax_rates": st.get("tax_rates") or {},
+                             "group_count": st.get("group_count"), "protocol": st.get("protocol"),
                              "flags": st["flags"], "invoice_open": st["invoice_open"],
                              "device_time": st["dt"], "dgi_last_sync": srv["last_sync"],
                              "dgi_pending": srv["pending"], "dgi_sent": srv["sent"], "dgi_state": srv["state"],

@@ -514,9 +514,12 @@ class TestNormalisation(HL1Base):
         self.assertAlmostEqual(self.response_of(si)["total"], flt(si.base_grand_total), delta=1)
 
     def test_CT29_hors_champ_code(self):
+        # v5.5.0 (specifications v2): hors champ = group S with the real item code; the rule of the
+        # communique n°010 (group A + code HORS CHAMP) remains an option of DGI Compliance Settings.
         si = fx.make_invoice("CLIENT PM SARL", [("DGI-A-HC", 1, 5000)], submit=True)
         si = self.assertNormalized(si)
-        self.assertEqual(self.request_of(si)["items"][0]["code"], "HORS CHAMP")
+        item = self.request_of(si)["items"][0]
+        self.assertEqual((item["taxGroup"], item["code"]), ("S", "DGI-A-HC"))
 
     def test_CT15_export_invoice(self):
         si = fx.make_invoice("CLIENT PM SARL", [("DGI-E-CAFE", 3, 20000)], custom_dgi_export=1, submit=True)

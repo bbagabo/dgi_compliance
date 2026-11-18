@@ -581,9 +581,9 @@
   },
   {
    "fieldname": "default_tax_group",
-   "label": "Default Tax Group (A-Z)",
+   "label": "Default Tax Group (A-S)",
    "fieldtype": "Select",
-   "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS\nT\nU\nV\nW\nX\nY\nZ",
+   "options": "A\nB\nC\nD\nE\nF\nG\nH\nI\nJ\nK\nL\nM\nN\nO\nP\nQ\nR\nS",
    "default": "A",
    "description": "Utilise UNIQUEMENT quand AUCUNE taxe n'est specifiee sur la facture (ni modele de taxes facture, ni modele de taxe d'article). Ne remplace JAMAIS un mapping existant: une taxe specifiee mais non mappee bloque la normalisation avec un message explicite."
   },
@@ -592,7 +592,7 @@
    "label": "Tax Group Mapping",
    "fieldtype": "Table",
    "options": "DGI Tax Group Map",
-   "description": "Correspondances vers les groupes e-DEF A-P, pilotees par la colonne Priority (la priorite la plus BASSE gagne). Par defaut: 10 = Modele de taxe d'article (ligne), 20 = Modele Taxes et Frais de Vente (facture). Une seule source par ligne. L'equivalent mappe est transmis dans le payload e-MCF (ItemDto.taxGroup)."
+   "description": "Correspondances vers les groupes de taxation A-S (T-Z reserves), pilotees par la colonne Priority (la priorite la plus BASSE gagne). Par defaut: 10 = Modele de taxe d'article (ligne), 20 = Modele Taxes et Frais de Vente (facture). Une seule source par ligne. L'equivalent mappe est transmis dans le payload e-MCF (ItemDto.taxGroup)."
   },
   {
    "fieldname": "send_line_discounts",
@@ -600,6 +600,14 @@
    "fieldtype": "Check",
    "default": "1",
    "description": "Protocole e-MCF v1.3: quand une remise ligne existe, envoie originalPrice (prix AVANT remise, valeur absolue) et priceModification (ex. 'Remise 10%') dans ItemDto; price reste le prix net APRES remise (conforme ERPNext) et continue de piloter le total (pas d'impact sur la reconciliation)."
+  },
+  {
+   "fieldname": "hors_champ_rule",
+   "fieldtype": "Select",
+   "label": "Operations hors champ (article coche 'Hors champ TVA')",
+   "options": "Groupe S (specifications v2)\nGroupe A + code HORS CHAMP (communique n°010)",
+   "default": "Groupe S (specifications v2)",
+   "description": "Specifications DGI v2 (octobre 2026) : une operation hors champ est declaree dans le groupe S avec son vrai code article ; le groupe A est reserve aux operations exonerees. L'ancienne regle (groupe A + code article 'HORS CHAMP', communique n°010) ne sert que si la DGI la demande encore."
   },
   {
    "fieldname": "sb_ctype",

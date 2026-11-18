@@ -106,7 +106,9 @@ class MCFDevice:
         self.max_syn_wait = max_syn_wait
         self._seq = start_seq if P.SEQ_MIN <= start_seq <= P.SEQ_MAX else P.SEQ_MIN
         self.last_sta = b""
-        self.group_count = None  # number of tax groups announced by C1h (16 in protocol v1.0, more after update)
+        self.group_count = None  # number of tax groups announced by C1h (16 in protocol v1, 26 in protocol v2)
+        self.protocol = None     # 2 when the MCF answers C1h ST2 (groups Q-Z), 1 otherwise
+        self._st2 = None         # (mid, supported) : ST2 support, learnt once per MCF
         self.exchanges = []      # short audit trail of the current operation
 
     @property
@@ -188,10 +190,26 @@ class MCFDevice:
 
     # ------------------------------------------------------------------ commands
     def status(self) -> dict:
+        """C1h (groups A-P), then C1h ST2 (groups Q-Z, protocol v2). An MCF that does not know ST2 stays in
+        protocol v1: its groups are those of the first answer (A-P, or more with an interim firmware)."""
         resp = self.transact(P.CMD_STATUS)
         st = P.parse_status(resp.text)
         st["flags"] = P.status_flags(resp.sta)
         st["invoice_open"] = P.invoice_open(resp.sta)
+        st["protocol"] = 1
+        known = self._st2 if self._st2 and self._st2[0] == st.get("mid") else None
+        if st.get("mid") and st.get("group_count") == P.PROTOCOL_V1_GROUPS and (known is None or known[1]):
+            try:
+                st = P.merge_status_st2(st, P.parse_status_st2(self.transact(P.CMD_STATUS, P.ST2).text))
+                self._st2 = (st.get("mid"), True)
+            except P.ProtocolError as e:            # definitive answer: protocol v1
+                st["st2_error"] = str(e)
+                self._st2 = (st.get("mid"), False)
+                log.info("MCF %s : C1h ST2 non prise en charge (protocole v1) : %s", st.get("mid"), e)
+            except LinkError as e:                  # no answer to ST2: asked again at the next reading
+                st["st2_error"] = str(e)
+                log.warning("MCF %s : pas de reponse a C1h ST2 : %s", st.get("mid"), e)
+        self.protocol = st["protocol"]
         if st.get("group_count"):
             self.group_count = st["group_count"]
         return st
@@ -217,7 +235,14 @@ class MCFDevice:
         self._checked(P.CMD_INFO, P.comment_data(line_id, content))
 
     def subtotal(self) -> dict:
-        return P.parse_subtotal(self._checked(P.CMD_SUBTOTAL, timeout=3.0), self.group_count)
+        """33h (groups A-P), then 33h ST2 (groups Q-Z) on an MCF of protocol v2."""
+        v2 = self.protocol == 2
+        sub = P.parse_subtotal(self._checked(P.CMD_SUBTOTAL, timeout=3.0),
+                               P.PROTOCOL_V1_GROUPS if v2 else self.group_count)
+        if v2 and sub["group_count"] == P.PROTOCOL_V1_GROUPS:
+            text = self._checked(P.CMD_SUBTOTAL, P.ST2, timeout=3.0, label="33h sous-total ST2")
+            sub = P.merge_subtotal(sub, P.parse_subtotal_st2(text))
+        return sub
 
     def pay(self, letter: str | None = None, amount=None) -> float:
         return P.parse_payment(self._checked(P.CMD_PAYMENT, P.payment_data(letter, amount), timeout=3.0))

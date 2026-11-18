@@ -1,5 +1,5 @@
 /*
- * DGI Compliance - Poste MCF (browser station), v5.2.0
+ * DGI Compliance - Poste MCF (browser station), v5.5.0 (protocole MCF-SFE v2 : C1h / 33h avec ST2)
  *
  * Runs in the ERPNext page "Poste MCF" (Chrome / Edge) on the cash desk where the MCF is plugged
  * (USB virtual COM port or RS232 adapter), through the Web Serial API. No program to install and
@@ -27,7 +27,7 @@
 })(typeof self !== "undefined" ? self : globalThis, function () {
 	"use strict";
 
-	const VERSION = "web-0.2.2";
+	const VERSION = "web-0.3.0";
 
 	// ======================================================================= protocol (protocol.py)
 	const SOH = 0x01, ETX = 0x03, BRK = 0x04, AMB = 0x05, NAK = 0x15, SYN = 0x16;
@@ -41,8 +41,12 @@
 		0x36: "36h ligne sup.", 0x38: "38h normalisation",
 	};
 	const MAX_DATA = 200, STA_LEN = 6, SEQ_MIN = 0x20, SEQ_MAX = 0xff;
+	// Protocol MCF-SFE v2 (October 2026): 26 groups A-Z, 19 applicable (A-S), T-Z reserved. C1h / 33h answer
+	// A-P without data (or ST1) and Q-Z with ST2. An MCF of protocol v1 only knows A-P.
 	const TAX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	const PROTOCOL_V1_GROUPS = 16;
+	const HISTORIC_LETTERS = TAX_LETTERS.slice(0, PROTOCOL_V1_GROUPS), ST2_LETTERS = TAX_LETTERS.slice(PROTOCOL_V1_GROUPS);
+	const RESERVED_LETTERS = "TUVWXYZ", ST2 = "ST2";
 	const SALE_TYPES = ["FV", "FT", "EV", "ET"], CREDIT_TYPES = ["FA", "EA"];
 	const CREDIT_NATURES = ["COR", "RAN", "RAM", "RRR"];
 	const CLIENT_TYPES = ["PP", "PM", "PC", "PL", "AO"], ITEM_TYPES = ["BIE", "SER", "TAX"];
@@ -177,6 +181,27 @@
 		out.group_count = rates.length;
 		return out;
 	}
+	const isNumber = (v) => String(v).trim() !== "" && !Number.isNaN(Number(String(v).trim()));
+	/** C1h ST2 (protocol v2): TAXQ..TAXZ. A v1 MCF refuses ST2 or answers its usual C1h: ProtocolError. */
+	function parseStatusSt2(text) {
+		const [kind, payload] = classify(text);
+		if (kind === "E") throw new ProtocolError(`C1h ST2 refusee par le MCF : ${payload || text}`);
+		const f = splitFields(text);
+		if (!f.length || f.length > ST2_LETTERS.length || !f.every(isNumber))
+			throw new ProtocolError(`C1h ST2 : reponse du protocole v1 ou illisible (${f.length} champs)`);
+		const rates = {};
+		f.forEach((v, i) => { rates[ST2_LETTERS[i]] = toFloat(v); });
+		return rates;
+	}
+	function mergeStatusSt2(st, ratesQZ) {
+		const out = Object.assign({}, st), rates = {};
+		for (const [k, v] of Object.entries(st.tax_rates || {})) if (HISTORIC_LETTERS.includes(k)) rates[k] = v;
+		Object.assign(rates, ratesQZ);
+		out.tax_rates = rates;
+		out.group_count = PROTOCOL_V1_GROUPS + Object.keys(ratesQZ).length;
+		out.protocol = 2;
+		return out;
+	}
 	function parseServerStatus(text) {
 		const f = splitFields(text);
 		return { sent: f[0] || "", pending: f[1] || "", last_sync: f[2] || "", state: f[3] || "", error: f[4] || "" };
@@ -210,6 +235,34 @@
 			mv: round2(f[0]), mt: round2(layout === "eltrade" ? f[1] : mtSum), mts: round2(f[base + 2 * g]),
 			mcur: round2(f[base + 2 * g + 1]), groups, layout: layout + f.length, group_count: g,
 		};
+	}
+	/** 33h ST2 (protocol v2): MVQ..MVZ, MTQ..MTZ. */
+	function parseSubtotalSt2(text) {
+		const [kind, payload] = classify(text);
+		if (kind === "E") throw new ProtocolError(`33h ST2 refusee par le MCF : ${payload || text}`);
+		const raw = splitFields(text);
+		if (!raw.length || raw.length % 2 || raw.length > 2 * ST2_LETTERS.length || !raw.every(isNumber))
+			throw new ProtocolError(`sous-total 33h ST2 illisible (${raw.length} champs)`);
+		const f = raw.map((x) => toFloat(x)), g = f.length / 2, groups = {};
+		for (let i = 0; i < g; i++) {
+			const total = f[i], vat = f[g + i];
+			if (total || vat) groups[ST2_LETTERS[i]] = { total: round2(total), vat: round2(vat) };
+		}
+		return { groups, group_count: g, layout: `st2-${f.length}` };
+	}
+	/** 33h (A-P) + 33h ST2 (Q-Z). Without an MT field (layout of the specification) the VAT total is the sum of
+	 *  the VAT of ALL the groups, Q-Z included: the amount 38h expects. ELTRADE gives its own MT: kept. */
+	function mergeSubtotal(sub, st2) {
+		const out = Object.assign({}, sub), groups = {};
+		for (const [k, v] of Object.entries(sub.groups || {})) if (HISTORIC_LETTERS.includes(k)) groups[k] = v;
+		Object.assign(groups, st2.groups || {});
+		out.groups = groups;
+		if (!String(sub.layout || "").startsWith("eltrade"))
+			out.mt = round2(Object.values(groups).reduce((a, x) => a + x.vat, 0));
+		out.group_count = PROTOCOL_V1_GROUPS + Number(st2.group_count || 0);
+		out.layout = `${sub.layout}+${st2.layout}`;
+		out.protocol = 2;
+		return out;
 	}
 	function parsePayment(text) {
 		const [kind, payload] = classify(text);
@@ -301,6 +354,8 @@
 			this.seq = opts.startSeq >= SEQ_MIN && opts.startSeq <= SEQ_MAX ? opts.startSeq : SEQ_MIN;
 			this.lastSta = new Uint8Array(0);
 			this.groupCount = null;
+			this.protocol = null;        // 2 when the MCF answers C1h ST2 (groups Q-Z), 1 otherwise
+			this.st2 = null;             // { mid, supported }: learnt once per MCF
 			this.exchanges = [];
 			this.trace = opts.trace || null;    // (direction, bytes, label) -> diagnostic log of the page
 			this._tail = Promise.resolve();
@@ -367,11 +422,25 @@
 			if (kind === "E") throw new DeviceRefused(label || COMMAND_NAMES[cmd], payload || resp.text);
 			return resp.text;
 		}
+		/** C1h (groups A-P), then C1h ST2 (groups Q-Z, protocol v2). Without ST2 the MCF stays in protocol v1. */
 		async status() {
 			const resp = await this.transact(CMD.STATUS);
-			const st = parseStatus(resp.text);
+			let st = parseStatus(resp.text);
 			st.flags = statusFlags(resp.sta);
 			st.invoice_open = invoiceOpen(resp.sta);
+			st.protocol = 1;
+			const known = this.st2 && this.st2.mid === st.mid ? this.st2 : null;
+			if (st.mid && st.group_count === PROTOCOL_V1_GROUPS && (!known || known.supported)) {
+				try {
+					st = mergeStatusSt2(st, parseStatusSt2((await this.transact(CMD.STATUS, ST2)).text));
+					this.st2 = { mid: st.mid, supported: true };
+				} catch (e) {
+					if (e instanceof ProtocolError) { st.st2_error = e.message; this.st2 = { mid: st.mid, supported: false }; }
+					else if (e instanceof LinkError) st.st2_error = e.message;      // asked again at the next reading
+					else throw e;
+				}
+			}
+			this.protocol = st.protocol;
 			if (st.group_count) this.groupCount = st.group_count;
 			return st;
 		}
@@ -386,7 +455,14 @@
 			return this.checked(CMD.ITEM, itemData(it), 3000, `31h article « ${String(it.name || "").slice(0, 24)} »`);
 		}
 		async setComment(lineId, content) { await this.checked(CMD.INFO, commentData(lineId, content)); }
-		async subtotal() { return parseSubtotal(await this.checked(CMD.SUBTOTAL, "", 3000), this.groupCount); }
+		/** 33h (groups A-P), then 33h ST2 (groups Q-Z) on an MCF of protocol v2. */
+		async subtotal() {
+			const v2 = this.protocol === 2;
+			let sub = parseSubtotal(await this.checked(CMD.SUBTOTAL, "", 3000), v2 ? PROTOCOL_V1_GROUPS : this.groupCount);
+			if (v2 && sub.group_count === PROTOCOL_V1_GROUPS)
+				sub = mergeSubtotal(sub, parseSubtotalSt2(await this.checked(CMD.SUBTOTAL, ST2, 3000, "33h sous-total ST2")));
+			return sub;
+		}
 		async pay(letter, amount) { return parsePayment(await this.checked(CMD.PAYMENT, paymentData(letter, amount), 3000)); }
 		async finalize(mv, mt, { expectedFn, pendingTimeout = 90000, pendingInterval = 1500, onPending } = {}) {
 			const data = finalizeData(mv, mt);
@@ -518,6 +594,22 @@
 		return ["REFUS_MCF", false, "Le MCF a refuse la commande."];
 	}
 
+	/** Rates shown to the user (reserved groups T-Z hidden) and the protocol of the MCF. */
+	function groupsSummary(st) {
+		const rates = Object.entries((st && st.tax_rates) || {}).filter(([g]) => !RESERVED_LETTERS.includes(g))
+			.map(([g, r]) => `${g} ${r}%`).join(" · ");
+		const note = st && st.protocol === 2 ? "protocole MCF-SFE v2, groupes T a Z reserves"
+			: (st && st.group_count > PROTOCOL_V1_GROUPS ? "groupes annonces par le MCF (C1h)"
+				: "protocole MCF-SFE v1 : groupes A a P seulement, mise a jour du MCF necessaire pour Q, R et S");
+		return { rates, note, v1: !(st && (st.protocol === 2 || st.group_count > PROTOCOL_V1_GROUPS)) };
+	}
+	function unknownGroupMessage(letter, known, protocol) {
+		const groups = Object.keys(known).sort().join("");
+		if (ST2_LETTERS.includes(letter) && protocol !== 2)
+			return `Le MCF repond au protocole MCF-SFE v1 (groupes ${groups}) : le groupe ${letter} demande la mise a jour du MCF au protocole v2 (commandes C1h et 33h avec ST2, specifications DGI d'octobre 2026).`;
+		return `Le MCF ne connait que les groupes ${groups} : le groupe ${letter} demande la mise a jour du MCF.`;
+	}
+
 	class Executor {
 		constructor(device, journal, { tolerance = 1.0, pendingTimeout = 90000, pendingInterval = 1500 } = {}) {
 			this.dev = device; this.journal = journal;
@@ -598,11 +690,13 @@
 			const known = st.tax_rates || {};
 			for (const it of inv.items) {
 				const letter = it.tax_group;
-				if (Object.keys(known).length && !(letter in known))
+				if (RESERVED_LETTERS.includes(letter))
 					return this.reject(op, {
-						code: "GROUPE_INCONNU_MCF", proven: true,
-						message: `Le MCF ne connait que les groupes ${Object.keys(known).sort().join("")} : le groupe ${letter} demande la mise a jour du MCF (groupes FACNO v2.0).`,
+						code: "GROUPE_RESERVE", proven: true,
+						message: `Groupe ${letter} reserve par la DGI (groupes T a Z) : aucun article ne peut y etre enregistre.`,
 					});
+				if (Object.keys(known).length && !(letter in known))
+					return this.reject(op, { code: "GROUPE_INCONNU_MCF", proven: true, message: unknownGroupMessage(letter, known, st.protocol) });
 				if (letter in known && Math.abs(known[letter] - Number(it.tax_rate)) > 0.001)
 					return this.reject(op, {
 						code: "TAUX_DIFFERENTS", proven: true,
@@ -1079,9 +1173,10 @@
 	}
 
 	return {
-		VERSION, CMD, COMMAND_NAMES, TAX_LETTERS, ProtocolError, LinkError, DeviceRefused, PendingTimeout, WrongDevice,
+		VERSION, CMD, COMMAND_NAMES, TAX_LETTERS, HISTORIC_LETTERS, ST2_LETTERS, RESERVED_LETTERS, ProtocolError, LinkError, DeviceRefused, PendingTimeout, WrongDevice,
 		ServerError, Unreachable, escapeText, unescapeText, truncateUtf8, field, fmtAmount, fmtQty, bcc16, buildFrame,
-		parseResponseFrame, statusFlags, invoiceOpen, classify, parseStatus, parseServerStatus, parseSubtotal,
+		parseResponseFrame, statusFlags, invoiceOpen, classify, parseStatus, parseStatusSt2, mergeStatusSt2,
+		parseServerStatus, parseSubtotal, parseSubtotalSt2, mergeSubtotal, unknownGroupMessage, groupsSummary,
 		subtotalLayout, parsePayment, parseNormalized, clientData, openInvoiceData, itemData, commentData, paymentData,
 		finalizeData, qrContent, hex, nidOf, MCFDevice, MemoryJournal, IDBJournal, Executor, classifyRefusal, KeyStore,
 		Identity, ServerClient, Station, WebSerialTransport, canonical, fingerprint, sha256hex, hostInfo, minimal,

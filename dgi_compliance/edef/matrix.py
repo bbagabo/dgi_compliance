@@ -108,8 +108,14 @@ def resolve_tax_group(doc_item, settings, doc=None):
     """Tax group used by the validation matrices. Non-strict: falls back to the default
     group so matrix checks never crash; the strict mapping check lives in the mapper."""
     if doc is not None:
-        return settings.tax_group_for_invoice(doc, doc_item) or (settings.default_tax_group or "A")
-    return settings.tax_group_for(doc_item.get("item_tax_template"), None)
+        grp = settings.tax_group_for_invoice(doc, doc_item) or (settings.default_tax_group or "A")
+    else:
+        grp = settings.tax_group_for(doc_item.get("item_tax_template"), None)
+    # v5.5.0 (specifications v2): an item 'hors champ' is declared in group S (edef.mapper).
+    from dgi_compliance.edef.mapper import HC_RULE_V1, HORS_CHAMP_GROUP, _is_hors_champ, hors_champ_rule
+    if _is_hors_champ(doc_item.get("item_code")) and hors_champ_rule(settings) != HC_RULE_V1:
+        return HORS_CHAMP_GROUP
+    return grp
 
 
 def resolve_credit_nature(doc):

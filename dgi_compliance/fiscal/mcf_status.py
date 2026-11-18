@@ -139,6 +139,17 @@ def compute_checks(obs: dict, dev, expected_nid: str | None, server_now) -> list
     checks.append(_check("TAUX", _("Groupes de taxation"), WARN if diffs else OK,
                          ("; ".join(diffs) + ". " + _("Synchronisez les groupes (e-MCF) ou mettez a jour le MCF."))
                          if diffs else _("{0} groupes, taux identiques a ERPNext.").format(groups), groups))
+    # v5.5.0: protocol MCF-SFE v2 (C1h ST2). An MCF of protocol v1 only knows A-P: groups Q, R and S refused.
+    rates = obs.get("tax_rates") if isinstance(obs.get("tax_rates"), dict) else {}
+    if cint(obs.get("protocol")) == 2 or all(g in rates for g in "QRS"):
+        checks.append(_check("PROTOCOLE", _("Protocole MCF-SFE"), OK,
+                             _("Groupes Q, R et S disponibles (specifications DGI v2)."),
+                             "v2" if cint(obs.get("protocol")) == 2 else _("groupes annonces en C1h")))
+    elif rates:
+        checks.append(_check("PROTOCOLE", _("Protocole MCF-SFE"), WARN,
+                             _("MCF au protocole v1 : groupes A a P seulement. Les factures avec un article en Q (8 %), "
+                               "R ou S (hors champ) sont refusees sur ce MCF ; demandez au fournisseur la mise a jour au "
+                               "protocole v2 (C1h et 33h avec ST2)."), "v1"))
     flags = [f for f in (obs.get("flags") or []) if f]
     if flags or obs.get("invoice_open"):
         checks.append(_check("ETAT", _("Etat du MCF (C1h)"), WARN,

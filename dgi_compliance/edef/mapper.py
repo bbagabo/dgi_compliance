@@ -1,4 +1,4 @@
-"""Map a real ERPNext v16 Sales Invoice to the e-MCF InvoiceRequestDataDto (API e-MCF v1.3).
+"""Map a real ERPNext v16 Sales Invoice to the e-MCF InvoiceRequestDataDto (API e-MCF v2.0).
 
 Currency: ALL figures sent to the e-MCF are in CDF (company base currency, base_* fields),
 even for a USD invoice; curCode/curRate/curDate let the DGI display the indicative
@@ -15,6 +15,11 @@ v5.0.0 (HL1):
     currencyCode/currencyRate;
   * operator = the user who normalizes (full name + user id);
   * credit notes: reference forced to the original Code DEF/DGI, or "RRR" (SFE 1.1.26/1.1.28).
+
+v5.5.0 (DGI specifications v2, October 2026):
+  * 19 applicable groups A-S; T-Z are reserved ("Reserve 1..7"): a line in T-Z is refused;
+  * an item flagged "hors champ" is declared in group S (group A is reserved to exempt operations);
+    the rule of the Communique n°010 (group A + code "HORS CHAMP") stays available as an option.
 """
 import frappe
 from frappe import _
@@ -22,7 +27,8 @@ from frappe.utils import flt, get_datetime
 
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef.calc import (
-    VAT_ONLY_GROUPS, compute_totals, round2, round3, split_specific_tax, parse_specific_tax,
+    APPLICABLE_GROUPS, GROUP_LETTERS, HORS_CHAMP_GROUP, VAT_ONLY_GROUPS, compute_totals, is_reserved_group,
+    parse_specific_tax, reserved_label, round2, round3, split_specific_tax,
 )
 from dgi_compliance.edef.payments import PaymentTypeMappingError, align_to_fiscal_total, resolve_payment_lines
 
@@ -30,13 +36,16 @@ __all__ = ["PaymentTypeMappingError"]
 
 INVOICE_TYPES = ("FV", "FT", "FA", "EV", "ET", "EA")
 CREDIT_TYPES = ("FA", "EA")
-TAX_GROUPS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+TAX_GROUPS = set(GROUP_LETTERS)          # letters carried by the protocols v2 (A-Z)
+APPLICABLE_TAX_GROUPS = set(APPLICABLE_GROUPS)   # groups an item may be recorded in (A-S)
 CLIENT_TYPES = ("PP", "PM", "PC", "PL", "AO")
 REFERENCE_TYPES = ("COR", "RAN", "RAM", "RRR")
 REFERENCE_LABELS = {"COR": "Correction", "RAN": "Annulation", "RAM": "Avoir suite reprise",
                     "RRR": "RRR"}
 COMMENT_LETTERS = "abcdefgh"  # cmta..cmth = Commentaire A..H
 HORS_CHAMP_CODE = "HORS CHAMP"
+HC_RULE_V2 = "Groupe S (specifications v2)"
+HC_RULE_V1 = "Groupe A + code HORS CHAMP (communique n°010)"
 
 
 class TaxGroupMappingError(frappe.ValidationError):
@@ -157,6 +166,47 @@ def _is_hors_champ(item_code):
         return False
 
 
+class ReservedTaxGroupError(TaxGroupMappingError):
+    """A line is mapped to a reserved group (T-Z): it cannot be recorded (FACNO v2.0)."""
+
+
+class HorsChampError(TaxGroupMappingError):
+    """An item flagged 'hors champ' carries a VAT tax template."""
+
+
+def check_applicable_group(grp, line_label=None):
+    """SFE 1.1.12 v2: only the 19 groups A-S may carry an item; T-Z are reserved."""
+    if is_reserved_group(grp):
+        frappe.throw(
+            _("{0}groupe de taxation {1} ({2}) : les groupes T a Z sont reserves par la DGI et aucun article ne "
+              "peut y etre enregistre (FACNO groupes de taxation v2.0). Corrigez le Tax Group Mapping "
+              "(DGI Compliance Settings).").format((line_label + " : ") if line_label else "", grp,
+                                                   reserved_label(grp)),
+            exc=ReservedTaxGroupError, title=_("Groupe de taxation reserve"))
+
+
+def hors_champ_rule(settings) -> str:
+    return (settings.get("hors_champ_rule") if hasattr(settings, "get") else None) or HC_RULE_V2
+
+
+def apply_hors_champ(grp, it, settings):
+    """(group, code) of a line whose item is flagged 'Hors champ TVA (DGI)'.
+
+    Specifications v2: declared in group S with its real item code. The mapped template must not
+    carry VAT (group A, S or any 0 % group); a VAT group is refused rather than silently changed.
+    Rule v1 (option): group of the mapping (A) + item code 'HORS CHAMP' (communique n°010)."""
+    if hors_champ_rule(settings) == HC_RULE_V1:
+        return grp, HORS_CHAMP_CODE
+    if grp != HORS_CHAMP_GROUP and (grp in VAT_ONLY_GROUPS or group_rate(grp)):
+        frappe.throw(
+            _("Ligne #{0} : l'article {1} est coche 'Hors champ TVA (DGI)' mais son modele de taxe correspond au "
+              "groupe {2} (TVA {3} %). Une operation hors champ est declaree dans le groupe S, sans TVA : "
+              "corrigez le modele de taxe de l'article ou decochez 'Hors champ'.").format(
+                it.get("idx") or "?", it.get("item_code") or "", grp, "%g" % group_rate(grp)),
+            exc=HorsChampError, title=_("Operation hors champ"))
+    return HORS_CHAMP_GROUP, it.get("item_code") or None
+
+
 def _resolve_tax_group_strict(doc, it, settings):
     grp = settings.tax_group_for_invoice(doc, it, strict=True)
     if grp:
@@ -179,6 +229,10 @@ def build_lines(doc, settings=None, mode=None):
     for it in (doc.get("items") or []):
         qty = abs(flt(it.get("qty")))
         grp = _resolve_tax_group_strict(doc, it, settings)
+        code = it.get("item_code") or None
+        if _is_hors_champ(it.get("item_code")):
+            grp, code = apply_hors_champ(grp, it, settings)
+        check_applicable_group(grp, _("Ligne #{0}").format(it.get("idx") or "?"))
         r = group_rate(grp)
         net = abs(flt(it.get("base_net_amount")))                 # CDF, excl. VAT, after discounts
         try:
@@ -217,7 +271,7 @@ def build_lines(doc, settings=None, mode=None):
         line = {
             "idx": it.get("idx"),
             "item_code": it.get("item_code") or "",
-            "code": HORS_CHAMP_CODE if _is_hors_champ(it.get("item_code")) else (it.get("item_code") or None),
+            "code": code,
             "name": (it.get("item_name") or it.get("description") or "ARTICLE").strip(),
             "type": _item_edef_type(it.get("item_code")),
             "group": grp,
@@ -388,6 +442,9 @@ def validate_invoice_request(dto):
             errors.append(f"ligne {i}: nom d'article vide")
         if it.get("taxGroup") not in TAX_GROUPS:
             errors.append(f"ligne {i}: groupe de taxation invalide ({it.get('taxGroup')})")
+        elif it.get("taxGroup") not in APPLICABLE_TAX_GROUPS:
+            errors.append(f"ligne {i}: groupe {it.get('taxGroup')} reserve ({reserved_label(it.get('taxGroup'))}), "
+                          "aucun article ne peut y etre enregistre (groupes applicables A a S)")
         if not (flt(it.get("price")) > 0):
             errors.append(f"ligne {i}: prix nul ou negatif interdit (SFE 1.1.22)")
         if not (flt(it.get("quantity")) > 0):

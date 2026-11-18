@@ -10,8 +10,11 @@ Implements the SFE calculation rules (Specifications SFE fev. 2026, section 1.5)
   1.5.10 the specific tax increases the VAT base.
 
 The e-MCF recomputes every amount; these functions let the SFE check the e-MCF figures
-before CONFIRM (API e-MCF v1.3, workflow p.5) and rebuild a breakdown when no e-MCF
+before CONFIRM (API e-MCF v2.0, workflow p.5) and rebuild a breakdown when no e-MCF
 response is stored (invoices normalized before v5.0.0).
+
+v5.5.0 (specifications v2, October 2026): 19 applicable groups A-S, T-Z reserved; rates of
+groups Q-Z read from trq..trz (the field 'ts' is the specific tax, not the rate of group S).
 """
 from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
 
@@ -120,12 +123,52 @@ def compute_totals(items, mode, rates):
     return {"groups": groups, "total": round2(total), "vtotal": round2(vtotal), "ts": round2(ts_total)}
 
 
-GROUP_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# --------------------------------------------------------------------------- #
+# Tax groups - DGI specifications v2 (Note de service n°01/209/DGI/DG/DLCFI/FMM/2026,
+# FACNO Groupes de taxation v2.0, protocols MCF-SFE v2 and e-MCF-SFE v2, October 2026)
+# --------------------------------------------------------------------------- #
+GROUP_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"   # carried by the protocols v2 (26 groups)
+HISTORIC_GROUPS = "ABCDEFGHIJKLMNOP"           # protocol v1 / ST1 answers (16 groups)
+APPLICABLE_GROUPS = "ABCDEFGHIJKLMNOPQRS"      # 19 groups in force (SFE 1.1.12), homologated scope
+RESERVED_GROUPS = "TUVWXYZ"                    # "Reserve 1..7": no item may be recorded in them
+HORS_CHAMP_GROUP = "S"                         # v2: hors champ moved from group A to group S
+
+
+def is_reserved_group(letter) -> bool:
+    return bool(letter) and str(letter).upper() in RESERVED_GROUPS
+
+
+def reserved_label(letter) -> str:
+    """'Reserve 1' for T ... 'Reserve 7' for Z (FACNO v2.0)."""
+    return "Reserve %d" % (RESERVED_GROUPS.index(str(letter).upper()) + 1)
+
+
+def rate_field(letter) -> str:
+    """Name of the RATE of a group in the e-MCF API v2 responses: ta..tp for A-P, trq..trz for
+    Q-Z. 'ts' is the specific tax amount, never the rate of group S."""
+    low = str(letter).lower()
+    return ("t" + low) if low <= "p" else ("tr" + low)
+
+
+def _response_rate(resp, letter):
+    """Rate of a group in an e-MCF response, or None. API v2 name first; for Q-Z, the v1.x
+    continuation (tq, tr, tt..tz) is accepted as a fallback, except 'ts' (specific tax)."""
+    low = str(letter).lower()
+    keys = [rate_field(low)]
+    if low > "p" and low != "s":
+        keys.append("t" + low)
+    for key in keys:
+        if resp.get(key) is not None:
+            try:
+                return float(resp.get(key))
+            except (TypeError, ValueError):
+                return None
+    return None
 
 
 def response_groups(resp):
-    """Per-group figures from an e-MCF InvoiceResponseDataDto (ta..tz, taa..taz, haa..haz,
-    vaa..vaz). Groups with no amount are skipped."""
+    """Per-group figures from an e-MCF InvoiceResponseDataDto (API v2: rates ta..tp and trq..trz,
+    totals taa..taz, HT haa..haz, VAT vaa..vaz). Groups with no amount are skipped."""
     out = {}
     if not isinstance(resp, dict):
         return out
@@ -136,7 +179,7 @@ def response_groups(resp):
         if not any(float(x or 0) for x in (total, ht, vat)):
             continue
         out[letter.upper()] = {
-            "rate": float(resp.get("t" + letter) or 0),
+            "rate": _response_rate(resp, letter) or 0.0,
             "total": round2(total), "ht": round2(ht), "vat": round2(vat),
         }
     return out
@@ -146,11 +189,9 @@ def response_rates(resp):
     rates = {}
     if isinstance(resp, dict):
         for letter in GROUP_LETTERS.lower():
-            if resp.get("t" + letter) is not None:
-                try:
-                    rates[letter.upper()] = float(resp.get("t" + letter))
-                except (TypeError, ValueError):
-                    pass
+            r = _response_rate(resp, letter)
+            if r is not None:
+                rates[letter.upper()] = r
     return rates
 
 

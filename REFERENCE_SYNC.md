@@ -65,8 +65,13 @@ D'après votre compte e-MCF (`GET /api/info/taxGroups`), les groupes sont actuel
 |---|---|
 | **16 %** (TVA normale) | **B**, **F** |
 | **5 %** | **C**, **G** |
+| **8 %** | **Q**, **R** |
 | **1 %** | **O**, **P** |
-| **0 %** (exonéré) | A, D, E, H, I, J, K, L, M, N |
+| **0 %** | A (exonéré), D, E, H, I, J, K, L, M, N, **S** (hors champ) |
+| réservés | T à Z (« Réservé 1 à 7 ») : inactifs, aucun article ne peut y être enregistré (v5.5.0) |
+
+Spécifications DGI v2 (octobre 2026) : l'API e-MCF 2.0 donne les taux de Q à Z dans `trq`…`trz` ;
+`ts` reste le montant de la taxe spécifique.
 
 ➡️ Dans **Tax Group Mapping**, reliez votre *Item Tax Template* « TVA 16% » au groupe **B** (ou **F**),
 « TVA 5% » au groupe **C** (ou **G**), etc. Ces valeurs étant évolutives, relancez la synchro pour les

@@ -18,7 +18,9 @@ Fonctions principales :
 Depuis la v5.1 (HL2) : MCF physique par poste navigateur ou passerelle, routage e-MCF / MCF avec secours.
 v5.4.0 : deux utilisateurs suffisent (rôle DGI Approbateur) et référence séquentielle par point de vente
 imprimée sous le numéro de facture (`WHATS_NEW_5.4.0.md`). v5.4.1 : revue de la passerelle, 16 anomalies
-corrigées (`WHATS_NEW_5.4.1.md`).
+corrigées (`WHATS_NEW_5.4.1.md`). v5.5.0 : spécifications techniques v2 de la DGI (octobre 2026) — groupes A à S,
+T à Z réservés, hors champ en groupe S, API e-MCF 2.0 (`trq`…`trz`), protocole MCF-SFE v2 (C1h et 33h avec `ST2`)
+(`WHATS_NEW_5.5.0.md`).
 
-Documents : `WHATS_NEW_5.4.1.md` à `WHATS_NEW_5.0.0.md` (nouveautés),
+Documents : `WHATS_NEW_5.5.0.md` à `WHATS_NEW_5.0.0.md` (nouveautés),
 `GUIDE_DEPLOIEMENT_v5.0.5.md` (Frappe Cloud), `TESTS_v5.0.5.md` (rapport de tests). Historique : `WHATS_NEW_*.md`.

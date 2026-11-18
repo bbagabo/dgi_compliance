@@ -74,12 +74,15 @@ const PARITY = [
 	["parse_normalized", ["1,50,FV,20261031101010,SIM0000001-1,A0700190Q,SINV-1,qwertyuioplkjhgfdsazxcvb"]],
 	["classify", ["P:ATTENTE SERVEUR"]], ["classify", ["R-12.50"]], ["classify", ["E"]],
 	["fmt_qty", [1.5]], ["fmt_qty", [2]], ["fmt_amount", [-0.004]], ["truncate_utf8", ["é^amp;é^amp;", 5]],
+	// protocol v2 (ST2)
+	["parse_status_st2", ["8.00,8.00,0.00,0,0,0,0,0,0,0"]],
+	["parse_subtotal_st2", [["1080.00", "0", "500.00", ...Array(7).fill("0"), "80.00", ...Array(9).fill("0")].join(",")]],
 ];
 const JS_NAMES = {
 	escape_text: M.escapeText, item_data: M.itemData, open_invoice_data: M.openInvoiceData, client_data: M.clientData,
 	payment_data: M.paymentData, finalize_data: M.finalizeData, parse_status: M.parseStatus,
 	parse_normalized: M.parseNormalized, classify: M.classify, fmt_qty: M.fmtQty, fmt_amount: M.fmtAmount,
-	truncate_utf8: M.truncateUtf8,
+	truncate_utf8: M.truncateUtf8, parse_status_st2: M.parseStatusSt2, parse_subtotal_st2: M.parseSubtotalSt2,
 };
 test("protocol: same output as protocol.py", async () => {
 	for (const [fn, args] of PARITY) {
@@ -246,4 +249,49 @@ test("station: lease -> MCF -> result, then idle", async () => {
 	assert.deepEqual(results.map((r) => r.outcome), ["normalized", "normalized"]);
 	assert.equal((await s.state()).invoices.length, 2);
 	assert.ok(await station.runOnce() >= 2000);
+});
+
+// ------------------------------------------------------------------ protocol MCF-SFE v2 (v5.5.0)
+const V2_RATES = { B: 16, C: 5, F: 16, G: 5, O: 1, P: 1, Q: 8, R: 8 };
+const ITEMS_V2 = [
+	{ name: "Lait en poudre", itype: "BIE", tax_group: "B", tax_rate: 16, amount: 2320, price: 1160, qty: 2 },
+	{ name: "Farine (8 %)", itype: "BIE", tax_group: "Q", tax_rate: 8, amount: 1080, price: 1080, qty: 1 },
+	{ name: "Indemnite", itype: "SER", tax_group: "S", tax_rate: 0, amount: 500, price: 500, qty: 1 },
+];
+const OP_V2 = { items: ITEMS_V2, totals: { mv: 3900, mt: 400 }, payments: [{ letter: "E", amount: 3900 }] };
+
+test("protocol v2: C1h ST2 read on a v2 MCF, not on a v1 MCF (asked once)", async () => {
+	const v2 = await newSim({ protocol: 2, rates: V2_RATES, layout: "spec35" });
+	const st = await v2.dev.status();
+	assert.equal(st.protocol, 2); assert.equal(st.group_count, 26);
+	assert.equal(st.tax_rates.Q, 8); assert.equal(st.tax_rates.R, 8); assert.equal(st.tax_rates.B, 16);
+	const v1 = await newSim();
+	const st1 = await v1.dev.status();
+	assert.equal(st1.protocol, 1); assert.ok(st1.st2_error); assert.ok(!("Q" in st1.tax_rates));
+	await v1.dev.status();
+	assert.equal((await v1.state()).executed.filter((c) => c === M.CMD.STATUS).length, 3);
+	assert.throws(() => M.parseStatusSt2("E:COMMANDE NON VALIDE"), M.ProtocolError);
+});
+
+for (const layout of ["spec35", "eltrade36"]) {
+	test(`protocol v2: invoice B + Q + S normalized, VAT of Q included (${layout})`, async () => {
+		const s = await newSim({ protocol: 2, rates: V2_RATES, layout });
+		const res = await new M.Executor(s.dev, new M.MemoryJournal()).execute(makeOp("OP-V2", "SINV-V2", OP_V2));
+		assert.equal(res.outcome, "normalized", JSON.stringify(res.error || {}));
+		assert.equal(res.data.machine_mt, 400);
+		const st = await s.state();
+		assert.equal(st.executed.filter((c) => c === M.CMD.SUBTOTAL).length, 2);
+	});
+}
+
+test("protocol v2: group Q refused on a v1 MCF, reserved group T always refused", async () => {
+	const v1 = await newSim();
+	const r1 = await new M.Executor(v1.dev, new M.MemoryJournal()).execute(makeOp("OP-Q", "SINV-Q", OP_V2));
+	assert.equal(r1.error.code, "GROUPE_INCONNU_MCF"); assert.match(r1.error.message, /protocole MCF-SFE v1/);
+	assert.ok(!(await v1.state()).executed.includes(M.CMD.OPEN));
+	const v2 = await newSim({ protocol: 2, rates: V2_RATES });
+	const r2 = await new M.Executor(v2.dev, new M.MemoryJournal()).execute(makeOp("OP-T", "SINV-T", {
+		items: [{ name: "X", itype: "BIE", tax_group: "T", tax_rate: 0, amount: 100, price: 100, qty: 1 }],
+		totals: { mv: 100, mt: 0 }, payments: [{ letter: "E", amount: 100 }] }));
+	assert.equal(r2.error.code, "GROUPE_RESERVE");
 });

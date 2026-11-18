@@ -53,8 +53,18 @@ class DGIComplianceSettings(Document):
           legacy rate-only rows are tolerated but flagged as deprecated;
         * duplicate sources with a different e-DEF group are blocked (ambiguous mapping);
         * empty priorities are auto-assigned (10 item / 20 invoice) so the order is explicit."""
+        from dgi_compliance.edef.calc import is_reserved_group, reserved_label
+        if is_reserved_group(self.default_tax_group):
+            frappe.throw(_("Default Tax Group {0} : les groupes T a Z sont reserves par la DGI ({1}). Choisissez un "
+                           "groupe applicable (A a S).").format(self.default_tax_group, reserved_label(self.default_tax_group)),
+                         title=_("Mapping Tax Group"))
         seen = {}
         for row in (self.tax_group_map or []):
+            if is_reserved_group(row.edef_tax_group):
+                frappe.throw(_("Tax Group Mapping ligne #{0} : le groupe {1} est reserve par la DGI ({2}) ; aucun article "
+                               "ne peut y etre enregistre (groupes applicables A a S).").format(
+                                   row.idx, row.edef_tax_group, reserved_label(row.edef_tax_group)),
+                             title=_("Mapping Tax Group"))
             itt = (row.item_tax_template or "").strip()
             stt = (row.get("sales_taxes_template") or "").strip()
             if itt and stt:
@@ -221,7 +231,7 @@ class DGIComplianceSettings(Document):
         return self.default_tax_group or "A"
 
     def tax_group_for_invoice(self, doc, item=None, strict: bool = False) -> str | None:
-        """Resolve the e-DEF Tax Group (A-P) for an invoice line.
+        """Resolve the DGI tax group (A-S, specifications v2) for an invoice line.
 
         v3.5: the resolution is driven by the Priority column of the single mapping table
         (lower value evaluated first). Default priorities keep the documented order:

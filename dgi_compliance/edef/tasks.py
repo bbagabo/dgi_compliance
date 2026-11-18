@@ -568,10 +568,11 @@ def _reuse_or_create(doc, dto):
 def verify_amounts(doc, dto, resp, settings):
     """Differences between the SFE calculation and the e-MCF figures (empty list = identical)."""
     tol = flt(getattr(settings, "emcf_check_tolerance", None) or 1.0)
-    rates = response_rates(resp)
-    if not rates:
+    rates = response_rates(resp)       # API v2: ta..tp, trq..trz ('ts' is the specific tax, never a rate)
+    missing = {it["taxGroup"] for it in dto.get("items") or []} - set(rates)
+    if missing:                        # a group without its rate in the answer: rate of the local catalogue
         from dgi_compliance.edef.mapper import group_rate
-        rates = {it["taxGroup"]: group_rate(it["taxGroup"]) for it in dto.get("items") or []}
+        rates.update({g: group_rate(g) for g in missing})
     expected = compute_totals(dto.get("items") or [], dto.get("mode"), rates)
     groups = response_groups(resp)
     actual = {"total": flt(resp.get("total")), "vtotal": flt(resp.get("vtotal")),

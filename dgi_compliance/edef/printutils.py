@@ -195,15 +195,17 @@ def dgi_totals(doc):
 
 
 def dgi_tax_summary(doc):
-    """'Montant TVA Specification' grouped by DGI tax group (A-P), in INVOICE currency.
-    base = sum of items' net amount per group; vat = base * group rate %."""
+    """'Montant TVA Specification' grouped by DGI tax group (A-S), in INVOICE currency.
+    base = sum of items' net amount per group; vat = base * group rate %.
+    v5.5.0: same group as the declaration (an item 'hors champ' is in group S)."""
     try:
         settings = get_settings()
     except Exception:
         return []
+    from dgi_compliance.edef.matrix import resolve_tax_group
     groups = {}
     for it in (doc.get("items") or []):
-        tg = settings.tax_group_for_invoice(doc, it) or (settings.default_tax_group or "A")
+        tg = resolve_tax_group(it, settings, doc)
         base = abs(flt(it.get("net_amount")))
         g = groups.setdefault(tg, {"group": tg, "base": 0.0, "rate": 0.0, "vat": 0.0})
         g["base"] += base

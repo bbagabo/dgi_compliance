@@ -69,9 +69,10 @@ frappe.ui.form.on("DGI Compliance Settings", {
                     `<b>Points de vente:</b> ${m.pos_count || 0}`,
                 ];
                 if (m.error) lines.push(`<b style="color:var(--red-500)">Erreur:</b> ${frappe.utils.escape_html(m.error)}`);
+                if (m.warning) lines.push(`<b style="color:var(--orange-500)">${__("Attention")}:</b> ${frappe.utils.escape_html(m.warning)}`);
                 frappe.msgprint({
                     title: ok ? __("Connexion DGI reussie") : __("Connexion DGI: probleme"),
-                    message: lines.join("<br>"), indicator: ok ? "green" : "red",
+                    message: lines.join("<br>"), indicator: ok ? (m.warning ? "orange" : "green") : "red",
                 });
             });
         }, grp);
@@ -203,7 +204,7 @@ async function dgi_show_mcf(read) {
     const esc = frappe.utils.escape_html;
     const companies = await frappe.db.get_list("Company", { fields: ["name", "tax_id"], limit: 100 });
     const owner = companies.find((c) => String(c.tax_id || "").replace(/\s/g, "").toUpperCase() === String(st.nif || "").toUpperCase());
-    const rates = Object.entries(st.tax_rates || {}).map(([g, r]) => `${g} ${r}%`).join(" · ");
+    const gs = DGIMCF.groupsSummary(st);
     const h = (v) => esc(v == null ? "" : String(v));
     const rows = [                                   // [label, already-escaped HTML]
         [__("Port"), h(port)],
@@ -212,8 +213,8 @@ async function dgi_show_mcf(read) {
             : ` <span class="text-danger">(${h(__("aucune societe avec ce NIF"))})</span>`)],
         [__("Date du MCF"), h(DGIMCFDesk.mcf_dt_user(st.dt))],
         [__("Compteurs (total / ventes / avoirs)"), h(`${st.tc} / ${st.fvc} / ${st.frc}`)],
-        [__("Groupes de taxation ({0})", [st.group_count]), h(rates) + (st.group_count > 16 ? ""
-            : ` <small>(${h(__("protocole v1.0 : groupes A a P"))})</small>`)],
+        [__("Groupes de taxation ({0})", [st.group_count]), h(gs.rates)
+            + ` <small class="${gs.v1 ? "text-danger" : "text-muted"}">(${h(__(gs.note))})</small>`],
         [__("Facture ouverte"), h(st.invoice_open ? __("Oui") : __("Non"))],
         [__("Etat"), h((st.flags || []).length ? st.flags.join(", ") : "OK")],
         [__("Connexion DGI (C2h)"), DGIMCFDesk.c2h_html(srv, st.dt)],

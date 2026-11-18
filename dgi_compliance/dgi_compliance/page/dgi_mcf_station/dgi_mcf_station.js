@@ -399,12 +399,12 @@ class DGIStationPage {
 	show_device() {
 		const st = this.device_status;
 		if (!st) return;
-		const rates = Object.entries(st.tax_rates || {}).map(([k, v]) => `${k} ${v}%`).join(" · ");
+		const gs = DGIMCF.groupsSummary(st);
 		$(this.page.body).find(".dgi-st-device").html(`<table class="table table-condensed small" style="margin:0">
 			<tr><th>MID</th><td>${esc(st.mid)}</td><th>NIF</th><td>${esc(st.nif)}</td><th>${__("Date MCF")}</th><td>${esc(st.dt)}</td></tr>
 			<tr><th>${__("Compteurs (total / ventes / avoirs)")}</th><td>${esc(st.tc)} / ${esc(st.fvc)} / ${esc(st.frc)}</td>
 				<th>${__("Derniere facture")}</th><td colspan="3">${esc(st.dfn)} ${esc(st.dft)} ${esc(st.dfdt)}</td></tr>
-			<tr><th>${__("Groupes de taxation ({0})", [st.group_count])}</th><td colspan="5">${esc(rates)}</td></tr>
+			<tr><th>${__("Groupes de taxation ({0})", [st.group_count])}</th><td colspan="5">${esc(gs.rates)} <small class="${gs.v1 ? "text-danger" : "text-muted"}">(${esc(__(gs.note))})</small></td></tr>
 			<tr><th>${__("Etat")}</th><td colspan="5">${esc((st.flags || []).join(", ") || "OK")}${st.invoice_open ? " - " + __("facture ouverte") : ""}</td></tr></table>`);
 		this.render_probe();
 	}
@@ -458,7 +458,7 @@ class DGIStationPage {
 			this.show_device();
 			const observation = {
 				mid: st.mid, nid: st.nid, nif: st.nif, tc: st.tc, fvc: st.fvc, frc: st.frc, dt: st.dt,
-				group_count: st.group_count, tax_rates: st.tax_rates, flags: st.flags || [],
+				group_count: st.group_count, tax_rates: st.tax_rates, protocol: st.protocol || 1, flags: st.flags || [],
 				taxpayer_name: tp.I0 || "", taxpayer_address: [tp.I1, tp.I2].filter(Boolean).join(", "),
 				taxpayer_phone: tp.I3 || "", taxpayer_email: tp.I4 || "", dgi: srv,
 			};
