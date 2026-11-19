@@ -1,7 +1,8 @@
-# dgi_compliance — v5.0.5 (HL1)
+# dgi_compliance — v5.5.1
 
 Application Frappe indépendante qui met ERPNext v16 en conformité avec la **facture normalisée**
-de la DGI (RDC) et normalise les factures de vente via l'**e-MCF** (API e-MCF v1.3).
+de la DGI (RDC), selon les **spécifications techniques v2** (octobre 2026). Elle normalise les factures de vente
+par l'**e-MCF** (API e-MCF 2.0) et par le **MCF physique** (protocole MCF-SFE v2).
 Elle est **upgrade-safe** : aucun fichier de Frappe ou d'ERPNext n'est modifié (hooks, champs
 personnalisés en fixtures, DocTypes et formats d'impression propres, patches propres).
 
@@ -20,7 +21,8 @@ v5.4.0 : deux utilisateurs suffisent (rôle DGI Approbateur) et référence séq
 imprimée sous le numéro de facture (`WHATS_NEW_5.4.0.md`). v5.4.1 : revue de la passerelle, 16 anomalies
 corrigées (`WHATS_NEW_5.4.1.md`). v5.5.0 : spécifications techniques v2 de la DGI (octobre 2026) — groupes A à S,
 T à Z réservés, hors champ en groupe S, API e-MCF 2.0 (`trq`…`trz`), protocole MCF-SFE v2 (C1h et 33h avec `ST2`)
-(`WHATS_NEW_5.5.0.md`).
+(`WHATS_NEW_5.5.0.md`). v5.5.1 : spécifications v2 strictes (hors champ toujours en groupe S) et
+périmètre homologué de la Note de service n°01/220 (`WHATS_NEW_5.5.1.md`).
 
-Documents : `WHATS_NEW_5.5.0.md` à `WHATS_NEW_5.0.0.md` (nouveautés),
+Documents : `WHATS_NEW_5.5.1.md` à `WHATS_NEW_5.0.0.md` (nouveautés),
 `GUIDE_DEPLOIEMENT_v5.0.5.md` (Frappe Cloud), `TESTS_v5.0.5.md` (rapport de tests). Historique : `WHATS_NEW_*.md`.

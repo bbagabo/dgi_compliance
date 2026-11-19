@@ -9,8 +9,7 @@ v5.0.0 (HL1):
   * unit prices built from the NET line amount, so line AND document-level discounts are
     reflected in both modes; prices rounded to 2 decimals, quantities to 3 (SFE 1.5.1/1.5.2);
   * specific tax (taxSpecificValue / taxSpecificAmount) carried inside the line net amount;
-  * tax groups A-Z (FACNO groupes de taxation v2.0), item flagged "hors champ" sent with the
-    code "HORS CHAMP" (Communique officiel n°010);
+  * tax groups A-Z (FACNO groupes de taxation v2.0);
   * payments from edef.payments (same lines as the printed invoice), PaymentDto
     currencyCode/currencyRate;
   * operator = the user who normalizes (full name + user id);
@@ -18,8 +17,11 @@ v5.0.0 (HL1):
 
 v5.5.0 (DGI specifications v2, October 2026):
   * 19 applicable groups A-S; T-Z are reserved ("Reserve 1..7"): a line in T-Z is refused;
-  * an item flagged "hors champ" is declared in group S (group A is reserved to exempt operations);
-    the rule of the Communique n°010 (group A + code "HORS CHAMP") stays available as an option.
+  * an item flagged "hors champ" is declared in group S with its real code (group A is reserved to
+    exempt operations).
+
+v5.5.1: strictly specifications v2 - the rule of the Communique n°010 (group A + code "HORS CHAMP")
+is withdrawn; homologated scope (Note de service n°01/220 VI.2): see homologation_scope_errors().
 """
 import frappe
 from frappe import _
@@ -43,9 +45,6 @@ REFERENCE_TYPES = ("COR", "RAN", "RAM", "RRR")
 REFERENCE_LABELS = {"COR": "Correction", "RAN": "Annulation", "RAM": "Avoir suite reprise",
                     "RRR": "RRR"}
 COMMENT_LETTERS = "abcdefgh"  # cmta..cmth = Commentaire A..H
-HORS_CHAMP_CODE = "HORS CHAMP"
-HC_RULE_V2 = "Groupe S (specifications v2)"
-HC_RULE_V1 = "Groupe A + code HORS CHAMP (communique n°010)"
 
 
 class TaxGroupMappingError(frappe.ValidationError):
@@ -157,6 +156,15 @@ def _item_edef_type(item_code):
     return "SER" if frappe.db.get_value("Item", item_code, "is_stock_item") == 0 else "BIE"
 
 
+def homologation_scope_errors(dto, settings) -> list:
+    """Note de service n°01/220 VI.2: once homologated, only the covered invoice types and tax groups.
+    Checked at normalization only (e-MCF and MCF), never when a stored invoice is read again."""
+    from dgi_compliance.edef.homologation import scope_errors
+    get = settings.get if hasattr(settings, "get") else (lambda k: getattr(settings, k, None))
+    return scope_errors(dto, get("homologation_status"), get("homologated_tax_groups"),
+                        get("homologated_invoice_types"))
+
+
 def _is_hors_champ(item_code):
     if not item_code:
         return False
@@ -185,18 +193,11 @@ def check_applicable_group(grp, line_label=None):
             exc=ReservedTaxGroupError, title=_("Groupe de taxation reserve"))
 
 
-def hors_champ_rule(settings) -> str:
-    return (settings.get("hors_champ_rule") if hasattr(settings, "get") else None) or HC_RULE_V2
+def apply_hors_champ(grp, it):
+    """Group of a line whose item is flagged 'Hors champ TVA (DGI)'.
 
-
-def apply_hors_champ(grp, it, settings):
-    """(group, code) of a line whose item is flagged 'Hors champ TVA (DGI)'.
-
-    Specifications v2: declared in group S with its real item code. The mapped template must not
-    carry VAT (group A, S or any 0 % group); a VAT group is refused rather than silently changed.
-    Rule v1 (option): group of the mapping (A) + item code 'HORS CHAMP' (communique n°010)."""
-    if hors_champ_rule(settings) == HC_RULE_V1:
-        return grp, HORS_CHAMP_CODE
+    Specifications v2 (FACNO groupes de taxation v2.0): group S, real item code. The mapped template must
+    not carry VAT (group A, S or any 0 % group); a VAT group is refused rather than silently changed."""
     if grp != HORS_CHAMP_GROUP and (grp in VAT_ONLY_GROUPS or group_rate(grp)):
         frappe.throw(
             _("Ligne #{0} : l'article {1} est coche 'Hors champ TVA (DGI)' mais son modele de taxe correspond au "
@@ -204,7 +205,7 @@ def apply_hors_champ(grp, it, settings):
               "corrigez le modele de taxe de l'article ou decochez 'Hors champ'.").format(
                 it.get("idx") or "?", it.get("item_code") or "", grp, "%g" % group_rate(grp)),
             exc=HorsChampError, title=_("Operation hors champ"))
-    return HORS_CHAMP_GROUP, it.get("item_code") or None
+    return HORS_CHAMP_GROUP
 
 
 def _resolve_tax_group_strict(doc, it, settings):
@@ -231,7 +232,7 @@ def build_lines(doc, settings=None, mode=None):
         grp = _resolve_tax_group_strict(doc, it, settings)
         code = it.get("item_code") or None
         if _is_hors_champ(it.get("item_code")):
-            grp, code = apply_hors_champ(grp, it, settings)
+            grp = apply_hors_champ(grp, it)
         check_applicable_group(grp, _("Ligne #{0}").format(it.get("idx") or "?"))
         r = group_rate(grp)
         net = abs(flt(it.get("base_net_amount")))                 # CDF, excl. VAT, after discounts

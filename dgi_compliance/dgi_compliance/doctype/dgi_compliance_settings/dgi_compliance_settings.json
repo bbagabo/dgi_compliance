@@ -121,6 +121,64 @@
    "read_only": 1
   },
   {
+   "fieldname": "sb_homologation",
+   "fieldtype": "Section Break",
+   "label": "Homologation DGI (Note de service n°01/220)",
+   "collapsible": 1,
+   "description": "Une fois homologue, le SFE ne peut etre utilise que pour les types de facture et les groupes de taxation couverts par l'attestation de conformite (Note n°01/220, VI.2). Avant l'homologation, aucune restriction : la campagne d'essais presente tous les groupes."
+  },
+  {
+   "fieldname": "homologation_status",
+   "fieldtype": "Select",
+   "label": "Statut d'homologation du SFE",
+   "options": "Non homologue (essais)\nHomologue",
+   "default": "Non homologue (essais)"
+  },
+  {
+   "fieldname": "homologation_attestation",
+   "fieldtype": "Data",
+   "label": "N° de l'attestation de conformite",
+   "depends_on": "eval:doc.homologation_status=='Homologue'",
+   "mandatory_depends_on": "eval:doc.homologation_status=='Homologue'"
+  },
+  {
+   "fieldname": "homologation_date",
+   "fieldtype": "Date",
+   "label": "Date de l'attestation",
+   "depends_on": "eval:doc.homologation_status=='Homologue'",
+   "mandatory_depends_on": "eval:doc.homologation_status=='Homologue'"
+  },
+  {
+   "fieldname": "homologated_version",
+   "fieldtype": "Data",
+   "label": "Version homologuee du SFE",
+   "depends_on": "eval:doc.homologation_status=='Homologue'",
+   "mandatory_depends_on": "eval:doc.homologation_status=='Homologue'",
+   "description": "Version de dgi_compliance indiquee sur l'attestation (ex. 5.5.1). Une autre version installee est signalee : une modification des fonctions fiscales demande une re-homologation."
+  },
+  {
+   "fieldname": "cb_homologation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "homologated_tax_groups",
+   "fieldtype": "Data",
+   "label": "Groupes de taxation homologues",
+   "default": "ABCDEFGHIJKLMNOPQRS",
+   "depends_on": "eval:doc.homologation_status=='Homologue'",
+   "mandatory_depends_on": "eval:doc.homologation_status=='Homologue'",
+   "description": "Lettres couvertes par l'attestation, ex. ABCDEFGHIJKLMNOPQRS. T a Z sont reserves."
+  },
+  {
+   "fieldname": "homologated_invoice_types",
+   "fieldtype": "Data",
+   "label": "Types de facture homologues",
+   "default": "FV,FT,FA,EV,ET,EA",
+   "depends_on": "eval:doc.homologation_status=='Homologue'",
+   "mandatory_depends_on": "eval:doc.homologation_status=='Homologue'",
+   "description": "Types couverts par l'attestation, separes par des virgules : FV, FT, FA, EV, ET, EA."
+  },
+  {
    "fieldname": "sb_hl1",
    "fieldtype": "Section Break",
    "label": "Controles e-MCF (v5.0.0)",
@@ -600,14 +658,6 @@
    "fieldtype": "Check",
    "default": "1",
    "description": "Protocole e-MCF v1.3: quand une remise ligne existe, envoie originalPrice (prix AVANT remise, valeur absolue) et priceModification (ex. 'Remise 10%') dans ItemDto; price reste le prix net APRES remise (conforme ERPNext) et continue de piloter le total (pas d'impact sur la reconciliation)."
-  },
-  {
-   "fieldname": "hors_champ_rule",
-   "fieldtype": "Select",
-   "label": "Operations hors champ (article coche 'Hors champ TVA')",
-   "options": "Groupe S (specifications v2)\nGroupe A + code HORS CHAMP (communique n°010)",
-   "default": "Groupe S (specifications v2)",
-   "description": "Specifications DGI v2 (octobre 2026) : une operation hors champ est declaree dans le groupe S avec son vrai code article ; le groupe A est reserve aux operations exonerees. L'ancienne regle (groupe A + code article 'HORS CHAMP', communique n°010) ne sert que si la DGI la demande encore."
   },
   {
    "fieldname": "sb_ctype",

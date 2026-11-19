@@ -112,8 +112,8 @@ def resolve_tax_group(doc_item, settings, doc=None):
     else:
         grp = settings.tax_group_for(doc_item.get("item_tax_template"), None)
     # v5.5.0 (specifications v2): an item 'hors champ' is declared in group S (edef.mapper).
-    from dgi_compliance.edef.mapper import HC_RULE_V1, HORS_CHAMP_GROUP, _is_hors_champ, hors_champ_rule
-    if _is_hors_champ(doc_item.get("item_code")) and hors_champ_rule(settings) != HC_RULE_V1:
+    from dgi_compliance.edef.mapper import HORS_CHAMP_GROUP, _is_hors_champ
+    if _is_hors_champ(doc_item.get("item_code")):
         return HORS_CHAMP_GROUP
     return grp
 

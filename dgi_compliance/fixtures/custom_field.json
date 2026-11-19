@@ -525,7 +525,7 @@
   "label": "Hors champ TVA (DGI)",
   "fieldtype": "Check",
   "insert_after": "dgi_specific_tax",
-  "description": "Operation hors champ TVA : declaree dans le groupe S avec son code article (specifications DGI v2, octobre 2026). Le modele de taxe de l'article ne doit pas porter de TVA. Ancienne regle (groupe A + code 'HORS CHAMP', communique n°010) : DGI Compliance Settings > Operations hors champ."
+  "description": "Operation hors champ TVA : declaree dans le groupe S avec son code article (specifications DGI v2, octobre 2026). Le modele de taxe de l'article ne doit pas porter de TVA."
  },
  {
   "doctype": "Custom Field",

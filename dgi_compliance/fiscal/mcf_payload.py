@@ -19,7 +19,7 @@ from frappe import _
 from frappe.utils import flt, get_datetime
 
 from dgi_compliance.edef.calc import HISTORIC_GROUPS, is_reserved_group
-from dgi_compliance.edef.mapper import build_invoice_request, validate_invoice_request
+from dgi_compliance.edef.mapper import build_invoice_request, homologation_scope_errors, validate_invoice_request
 
 PAYMENT_LETTERS = {"ESPECES": "E", "VIREMENT": "V", "CARTEBANCAIRE": "C", "MOBILEMONEY": "M",
                    "CHEQUES": "D", "AUTRE": "A"}
@@ -93,7 +93,7 @@ def build_mcf_invoice(doc, settings, route) -> tuple[dict, dict]:
     dto = build_invoice_request(doc)
     if route and route.nif:
         dto["nif"] = route.nif
-    errors = validate_invoice_request(dto)
+    errors = validate_invoice_request(dto) + homologation_scope_errors(dto, settings)
     if errors:
         frappe.throw(_("Donnees de facture non conformes : ") + "; ".join(errors), exc=MCFPayloadError,
                      title=_("Normalisation MCF"))

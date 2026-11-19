@@ -25,7 +25,7 @@ from frappe.utils import nowdate, getdate, date_diff, flt, now_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef import client
 from dgi_compliance.edef.mapper import (
-    build_invoice_request, validate_invoice_request, TaxGroupMappingError, COMMENT_LETTERS,
+    build_invoice_request, homologation_scope_errors, validate_invoice_request, TaxGroupMappingError, COMMENT_LETTERS,
 )
 from dgi_compliance.edef.payments import PaymentTypeMappingError
 from dgi_compliance.edef.calc import compute_totals, compare, response_groups, response_rates
@@ -674,7 +674,7 @@ def _normalize_emcf(doc, settings):
         _mark_error(doc, str(e))
         _commit()
         raise
-    errors = validate_invoice_request(dto)
+    errors = validate_invoice_request(dto) + homologation_scope_errors(dto, settings)
     if errors:
         log_exchange("validate", dto, None, errors, reference_invoice=doc.name)
         return _fail(doc, "validate", _("Donnees de facture non conformes: ") + "; ".join(errors))

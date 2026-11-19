@@ -6,13 +6,15 @@ Run on a TEST site (data is committed by the normalization flow):
 
 The e-MCF is simulated with the API v2 field names (tests/emcf_simulator.py: trq..trz, ts = specific tax).
   V01  item hors champ -> group S with its real item code (A is now "Exonere")
-  V02  option "communique n°010" -> group A + code HORS CHAMP
+  V02  v5.5.1: the rule of the communique n°010 is withdrawn (never code HORS CHAMP, no setting)
   V03  item hors champ on a VAT template -> refused (no silent change of group)
   V04  groups B (specific tax) + Q + R + S normalized on an e-MCF v2 (rates read in trq..trz, not in ts)
   V05  reserved groups T-Z: refused in the mapping, in the request, catalogue reserved and inactive
   V06  e-MCF answer without the rate of a group -> rate of the local catalogue
   V07  MCF channel: group Q on an MCF of protocol v1 -> refused with the protocol v2 message
   V08  migration patch: idempotent, written to the journal
+  V09  v5.5.1: homologated scope (Note n°01/220 VI.2): no restriction before; once homologated, a group
+       or an invoice type outside the attestation is refused on the e-MCF and the MCF channels
 """
 import json
 
@@ -29,7 +31,7 @@ class TestSpecificationsV2(HL1Base):
         frappe.clear_cache(doctype="DGI Compliance Settings")
 
     def tearDown(self):
-        self._settings_value("hors_champ_rule", "Groupe S (specifications v2)")
+        self._settings_value("homologation_status", "Non homologue (essais)")
         frappe.db.set_value("Item", "DGI-B-LAIT", "dgi_hors_champ", 0)
         frappe.db.commit()
 
@@ -49,12 +51,15 @@ class TestSpecificationsV2(HL1Base):
         self.assertIn("S", json.dumps(ctx, default=str))
 
     # ---------- V02 ----------
-    def test_V02_rule_of_the_communique_010_as_an_option(self):
-        self._settings_value("hors_champ_rule", "Groupe A + code HORS CHAMP (communique n°010)")
+    def test_V02_rule_of_the_communique_010_withdrawn(self):
+        meta = frappe.get_meta("DGI Compliance Settings")
+        self.assertIsNone(meta.get_field("hors_champ_rule"))
+        frappe.db.set_single_value("DGI Compliance Settings", "hors_champ_rule",
+                                   "Groupe A + code HORS CHAMP (communique n°010)")   # value left by 5.5.0
         si = fx.make_invoice("CLIENT PM SARL", [("DGI-A-HC", 1, 5000)], submit=True)
         si = self.assertNormalized(si)
         item = self.request_of(si)["items"][0]
-        self.assertEqual((item["taxGroup"], item["code"]), ("A", "HORS CHAMP"))
+        self.assertEqual((item["taxGroup"], item["code"]), ("S", "DGI-A-HC"))
 
     # ---------- V03 ----------
     def test_V03_hors_champ_on_a_vat_item_is_refused(self):
@@ -135,6 +140,46 @@ class TestSpecificationsV2(HL1Base):
         self.assertEqual(frappe.db.count("DGI Gateway Event", {"event_code": "SPECS_V2"}), before + 2)
         self.assertEqual(frappe.db.count("DGI Tax Group", {"is_reserved": 1, "is_active": 0}), 7)
         self.assertNotIn("champ", (frappe.db.get_value("DGI Tax Group", "A", "description") or "").lower())
+
+    # ---------- V09 ----------
+    def _homologate(self, groups="ABCDEFGHIJKLMNOPS", types="FV,FA"):
+        st = frappe.get_doc("DGI Compliance Settings")
+        st.update({"homologation_status": "Homologue", "homologation_attestation": "ATT-TEST-0001",
+                   "homologation_date": "2026-12-01", "homologated_version": "5.5.1",
+                   "homologated_tax_groups": groups, "homologated_invoice_types": types})
+        st.save(ignore_permissions=True)
+        frappe.db.commit()
+        return st
+
+    def test_V09_homologated_scope(self):
+        # before the homologation: every group, every type (campaign)
+        si = fx.make_invoice("CLIENT PM SARL", [("DGI-Q-BOISSON", 1, 2500)], submit=True)
+        self.assertNormalized(si)
+        st = self._homologate(groups="s b, a")
+        self.assertEqual((st.homologated_tax_groups, st.homologated_invoice_types), ("ABS", "FV,FA"))
+        ok = fx.make_invoice("CLIENT PM SARL", [("DGI-B-LAIT", 1, 10000), ("DGI-S-HC", 1, 500)], submit=True)
+        self.assertNormalized(ok)
+        out = fx.make_invoice("CLIENT PM SARL", [("DGI-B-LAIT", 1, 10000), ("DGI-Q-BOISSON", 1, 2500)])
+        sent = self.sim.count("POST", "/invoice")
+        with self.assertRaises(frappe.ValidationError) as ctx:
+            out.submit()
+        self.assertIn("non couvert", str(ctx.exception))
+        self.assertEqual(reload(out).docstatus, 0)
+        self.assertEqual(self.sim.count("POST", "/invoice"), sent)          # nothing sent to the e-MCF
+        from dgi_compliance.fiscal import mcf_payload
+        orig = mcf_payload._device_groups
+        mcf_payload._device_groups = lambda r: set()
+        try:
+            with self.assertRaises(mcf_payload.MCFPayloadError) as ctx:
+                mcf_payload.build_mcf_invoice(reload(out), frappe.get_doc("DGI Compliance Settings"),
+                                              frappe._dict(device="MCF-TEST", nif=None))
+            self.assertIn("non couvert", str(ctx.exception))
+        finally:
+            mcf_payload._device_groups = orig
+        st = frappe.get_doc("DGI Compliance Settings")
+        st.homologated_tax_groups = "ABT"
+        with self.assertRaises(frappe.ValidationError):
+            st.save(ignore_permissions=True)
 
 
 def reload_tg(code):

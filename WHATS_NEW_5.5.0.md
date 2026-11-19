@@ -65,8 +65,8 @@ Exemple vérifié (B avec taxe spécifique 460, Q 8 %, S hors champ, mode HT) : 
 - Constantes uniques dans `edef/calc.py` : `APPLICABLE_GROUPS` (A à S), `RESERVED_GROUPS` (T à Z),
   `HISTORIC_GROUPS` (A à P), `HORS_CHAMP_GROUP` (S).
 - *DGI Compliance Settings* : listes de groupes limitées à A à S (Tax Group Mapping, groupe par défaut,
-  Matrice D). Nouveau paramètre **Opérations hors champ** : « Groupe S (spécifications v2) » par défaut, ou
-  « Groupe A + code HORS CHAMP (communiqué n°010) ».
+  Matrice D). Paramètre **Opérations hors champ** (groupe S ou ancienne règle du communiqué n°010) : retiré en
+  5.5.1, le hors champ est toujours en groupe S.
 - *DGI Tax Group* : champ **Réservé (DGI)** ; un groupe T à Z reste inactif même si on le coche « Actif ».
 - La Matrice D voit le groupe réel d'un article hors champ (S).
 
@@ -96,20 +96,8 @@ Le patch `v5_5.specifications_v2` est idempotent et ne supprime rien :
 
 ## 7. Homologation (Note de service n°01/220)
 
-- **Ré-homologation obligatoire** après une modification des groupes de taxation (§ I.4 et VI.2), à demander dans
-  les **30 jours ouvrables** qui suivent l'annonce de la DGI. Selon la date retenue pour l'annonce, cela donne
-  environ le **25 novembre 2026** (depuis la note 209 du 14 octobre) ou le **7 décembre 2026** (depuis la note 220
-  du 26 octobre). Calcul hors jours fériés, à confirmer auprès de la Commission.
-- **Mise en production** d'une version soumise à ré-homologation : pas avant de l'avoir obtenue, sauf mesure
-  transitoire de la DGI (§ VI.2). La 5.5.0 est donc à déployer d'abord sur le site de test pour la campagne.
-- L'attestation ne couvre que les **types de factures et groupes présentés** pendant les essais (§ VI.2). Présenter
-  les 19 groupes A à S, en particulier Q, R et S, sur MCF et sur e-MCF.
-- Un SFE doit pouvoir **utiliser le MCF et l'e-MCF** (§ VI.2). Le tableau de conformité v2 retire en conséquence la
-  mention « applicable uniquement au e-MCF » (1.4, 1.5, 1.23, 1.29). Le canal MCF de la HL2 y répond.
-- Homologation transitoire : homologation complète dans les **3 mois** suivant le 26 octobre 2026, soit avant le
-  26 janvier 2027 (§ I.3).
-- Dépôt possible en ligne (plateforme e-Homologation). Formulaire : cocher « RE-HOMOLOGATION » avec le numéro
-  d'attestation si le SFE est déjà homologué. Version logicielle : 5.5.0.
+Corrigé en 5.5.1 : le SFE n'est pas encore homologué. Il s'agit d'une **homologation initiale** directement sur
+les spécifications v2, sans ré-homologation ni délai de 30 jours ouvrables. Voir `WHATS_NEW_5.5.1.md`, section 3.
 
 ## 8. Tests
 

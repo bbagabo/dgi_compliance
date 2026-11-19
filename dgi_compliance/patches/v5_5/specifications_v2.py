@@ -4,8 +4,7 @@ taxation v2.0, protocols MCF-SFE v2 and e-MCF-SFE v2, October 2026).
 Idempotent, never deletes data, never overrides an administrator's choice:
   * tax groups: the 19 applicable groups A-S exist; group A is "Exonere" (hors champ moved to S);
     the reserved groups T-Z exist, flagged reserved and inactive ("Reserve 1..7");
-  * DGI Compliance Settings: a default tax group in T-Z goes back to A; the hors champ rule is
-    set to group S (specifications v2) when it was never chosen;
+  * DGI Compliance Settings: a default tax group in T-Z goes back to A;
   * Matrix D rules on a reserved group are deactivated;
   * Tax Group Mapping rows on a reserved group are reported (they block the normalization).
 The result is written to the journal (DGI Gateway Event, SPECS_V2).
@@ -48,8 +47,6 @@ def execute():
     if default in RESERVED_GROUPS:
         frappe.db.set_single_value("DGI Compliance Settings", "default_tax_group", "A")
         notes.append(f"groupe par defaut {default} (reserve) remplace par A")
-    if not frappe.db.get_single_value("DGI Compliance Settings", "hors_champ_rule"):
-        frappe.db.set_single_value("DGI Compliance Settings", "hors_champ_rule", "Groupe S (specifications v2)")
     blocked = frappe.get_all("DGI Tax Group Map", filters={"edef_tax_group": ["in", list(RESERVED_GROUPS)]},
                              fields=["idx", "item_tax_template", "sales_taxes_template", "edef_tax_group"])
     for r in blocked:
