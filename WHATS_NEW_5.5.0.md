@@ -77,7 +77,7 @@ Le patch `v5_5.specifications_v2` est idempotent et ne supprime rien :
 1. crée les groupes A à S manquants ; groupe A renommé « Exonere » s'il contenait « hors champ » (sauf
    verrouillage manuel) ;
 2. crée ou marque T à Z réservés et inactifs ;
-3. remplace un groupe par défaut T à Z par A ; règle hors champ = groupe S si elle n'a jamais été choisie ;
+3. remplace un groupe par défaut T à Z par A ;
 4. désactive les règles de Matrice D sur T à Z ; signale les lignes du Tax Group Mapping sur T à Z ;
 5. inscrit le résultat au journal (*DGI Gateway Event*, `SPECS_V2`, niveau Alerte s'il reste une correction à
    faire).
