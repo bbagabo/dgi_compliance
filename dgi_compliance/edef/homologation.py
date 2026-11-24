@@ -10,11 +10,19 @@ to present every group and every invoice type. Once the attestation is recorded 
 normalization outside the covered invoice types or tax groups is refused BEFORE anything is sent to the
 MCF or the e-MCF. Pure functions (no database): tested without a bench.
 """
+import re
+
 from dgi_compliance.edef.calc import APPLICABLE_GROUPS, RESERVED_GROUPS
 
 HOMOLOGATED = "Homologue"
 NOT_HOMOLOGATED = "Non homologue (essais)"
 INVOICE_TYPES = ("FV", "FT", "FA", "EV", "ET", "EA")
+
+
+def normalize_version(text) -> str:
+    """Version written on the attestation -> the application version: 'HL v1.0.0', 'HLv1.0.0', 'v1.0.0' and
+    '1.0.0' all give '1.0.0' (numbering HL, v1.0.0 = former 5.5.2)."""
+    return re.sub(r"^\s*(?:HL)?\s*V?\s*", "", str(text or ""), flags=re.IGNORECASE).strip()
 
 
 def parse_groups(text) -> str:

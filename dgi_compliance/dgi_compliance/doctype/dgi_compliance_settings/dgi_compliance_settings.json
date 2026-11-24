@@ -154,7 +154,7 @@
    "label": "Version homologuee du SFE",
    "depends_on": "eval:doc.homologation_status=='Homologue'",
    "mandatory_depends_on": "eval:doc.homologation_status=='Homologue'",
-   "description": "Version de dgi_compliance indiquee sur l'attestation (ex. 5.5.1). Une autre version installee est signalee : une modification des fonctions fiscales demande une re-homologation."
+   "description": "Version du SFE indiquee sur l'attestation (ex. HL v1.0.0). Une autre version installee est signalee : une modification des fonctions fiscales demande une re-homologation."
   },
   {
    "fieldname": "cb_homologation",

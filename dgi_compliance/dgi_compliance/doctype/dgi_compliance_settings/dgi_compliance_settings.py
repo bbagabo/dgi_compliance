@@ -51,7 +51,7 @@ class DGIComplianceSettings(Document):
     def _validate_homologation(self):
         """v5.5.1 - homologated scope (Note de service n°01/220, VI.2): normalized letters and types."""
         from dgi_compliance import __version__
-        from dgi_compliance.edef.homologation import HOMOLOGATED, parse_groups, parse_types
+        from dgi_compliance.edef.homologation import HOMOLOGATED, normalize_version, parse_groups, parse_types
         if (self.homologation_status or "") != HOMOLOGATED:
             return
         try:
@@ -62,12 +62,12 @@ class DGIComplianceSettings(Document):
         if not self.homologated_tax_groups or not self.homologated_invoice_types:
             frappe.throw(_("Perimetre homologue : indiquez les groupes de taxation et les types de facture couverts par "
                            "l'attestation de conformite."), title=_("Homologation DGI"))
-        version = (self.homologated_version or "").strip().lstrip("vV")
+        version = normalize_version(self.homologated_version)
         if version and version != __version__:
             frappe.msgprint(_("La version installee ({0}) differe de la version homologuee ({1}). Une modification qui "
                               "touche aux fonctions fiscales, aux groupes ou aux interfaces DGI est soumise a "
                               "re-homologation avant sa mise en production (Note n°01/220, VI.2).").format(
-                                  __version__, version), indicator="orange", title=_("Homologation DGI"))
+                                  "HL v" + __version__, "HL v" + version), indicator="orange", title=_("Homologation DGI"))
 
     def _validate_tax_group_map(self):
         """Integrity of the Tax Group Mapping table:

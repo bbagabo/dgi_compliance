@@ -4,7 +4,9 @@
 """
 import unittest
 
-from dgi_compliance.edef.homologation import HOMOLOGATED, NOT_HOMOLOGATED, parse_groups, parse_types, scope_errors
+from dgi_compliance.edef.homologation import (
+    HOMOLOGATED, NOT_HOMOLOGATED, normalize_version, parse_groups, parse_types, scope_errors,
+)
 
 
 def dto(kind="FV", *groups):
@@ -52,6 +54,23 @@ class TestScope(unittest.TestCase):
         errors = scope_errors(dto("FV", "B"), HOMOLOGATED, "ABT", "FV")
         self.assertEqual(len(errors), 1)
         self.assertIn("mal renseigne", errors[0])
+
+
+
+class TestVersionHL(unittest.TestCase):
+    """Numbering HL (HL v1.0.0 = former 5.5.2): the attestation may write the version in any usual form."""
+
+    def test_forms_of_the_version(self):
+        for text in ("HL v1.0.0", "HLv1.0.0", "hl V1.0.0", "v1.0.0", "1.0.0", " HL 1.0.0 "):
+            self.assertEqual(normalize_version(text), "1.0.0", text)
+        self.assertEqual(normalize_version("HL v1.1.0"), "1.1.0")
+        self.assertEqual(normalize_version(""), "")
+        self.assertEqual(normalize_version(None), "")
+
+    def test_application_version_is_hl_1(self):
+        from dgi_compliance import __version__
+        self.assertEqual(__version__.split(".")[0], "1")
+
 
 
 if __name__ == "__main__":

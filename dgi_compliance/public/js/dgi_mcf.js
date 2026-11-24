@@ -27,7 +27,7 @@
 })(typeof self !== "undefined" ? self : globalThis, function () {
 	"use strict";
 
-	const VERSION = "web-0.3.0";
+	const VERSION = "web-1.0.0";   // poste navigateur du SFE HL v1.0.0
 
 	// ======================================================================= protocol (protocol.py)
 	const SOH = 0x01, ETX = 0x03, BRK = 0x04, AMB = 0x05, NAK = 0x15, SYN = 0x16;
