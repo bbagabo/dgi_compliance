@@ -22,6 +22,9 @@ from datetime import datetime
 from . import protocol as P
 from .device import LinkError, Transport
 
+# SFE 1.5.8: the amount recorded in group N (TVA specifique) is entirely VAT.
+VAT_ONLY_LETTERS = ("N",)
+
 
 class MCFSimulator(Transport):
     def __init__(self, nid="SIM0000001", nif="A0700190Q", *, acnt=1, rates=None,
@@ -214,10 +217,20 @@ class MCFSimulator(Transport):
         self._inv["groups"][letter] = round(g + amount, 2)
         self._inv["ts"] = round(self._inv["ts"] + ts_total, 2)
         vat = self._vat(letter, amount)
-        mv = amount if self._inv["pmode"] == "TTC" else amount + vat
-        return "%.2f,%.2f,%.2f,%.2f" % (mv + ts_total, (amount - vat) if self._inv["pmode"] == "TTC" else amount, vat, ts_total)
+        mv = self._group_total(letter, amount, vat)
+        ht = (amount - vat) if (self._inv["pmode"] == "TTC" or letter in VAT_ONLY_LETTERS) else amount
+        return "%.2f,%.2f,%.2f,%.2f" % (mv + ts_total, ht, vat, ts_total)
+
+    def _group_total(self, letter, amount, vat):
+        """Amount of a group with VAT: TTC = the amount entered; HT = amount + VAT. Group N is VAT only:
+        its amount is already the VAT (SFE 1.5.8), in both modes."""
+        if self._inv["pmode"] == "TTC" or letter in VAT_ONLY_LETTERS:
+            return round(amount, 2)
+        return round(amount + vat, 2)
 
     def _vat(self, letter, amount):
+        if letter in VAT_ONLY_LETTERS:
+            return round(amount, 2)
         r = self.rates.get(letter, 0.0)
         if not r:
             return 0.0
@@ -229,8 +242,7 @@ class MCFSimulator(Transport):
         groups = {}
         for letter, mon in self._inv["groups"].items():
             vat = self._vat(letter, mon)
-            total = mon if self._inv["pmode"] == "TTC" else round(mon + vat, 2)
-            groups[letter] = (round(total, 2), vat)
+            groups[letter] = (self._group_total(letter, mon, vat), vat)
         mv = round(sum(t for t, _ in groups.values()) + self._inv["ts"], 2)
         mt = round(sum(v for _, v in groups.values()), 2)
         return mv, mt, groups

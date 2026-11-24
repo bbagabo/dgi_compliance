@@ -207,3 +207,29 @@ def test_unknown_credit_letter_is_a_clear_refusal(journal):
     res = Executor(dev, journal).execute(make_op(payments=[{"letter": "R", "amount": 2820}]))
     assert res["outcome"] == "rejected" and res["error"]["code"] == "PAIEMENT_INCONNU_MCF"
     assert not sim.invoices and not P.invoice_open(sim._sta())
+
+
+FUEL = [{"name": "Essence super", "itype": "BIE", "tax_group": "M", "tax_rate": 0, "amount": 239000,
+         "price": 2390, "qty": 100},
+        {"name": "TVA specifique essence", "itype": "TAX", "tax_group": "N", "tax_rate": 0, "amount": 25000,
+         "price": 250, "qty": 100}]
+
+
+def test_group_n_is_vat_in_both_modes(journal):
+    """v0.3.1 (dgi_compliance 5.5.2), SFE 1.5.8: the amount of group N is entirely VAT. ERPNext expects
+    MT = the N amount; the MCF subtotal agrees and the sale (M + N) is normalized, in TTC and in HT."""
+    for i, pmode in enumerate(("TTC", "HT")):
+        sim = MCFSimulator(nid=NID, nif=NIF)
+        op = make_op(op_id=f"OP-N{i}", fn=f"SINV-N{i}", items=FUEL, pmode=pmode, totals={"mv": 264000, "mt": 25000},
+                     payments=[{"letter": "E", "amount": 264000}])
+        res = ex(MCFDevice(sim, response_timeout=0.5), journal).execute(op)
+        assert res["outcome"] == "normalized", (pmode, res)
+        assert (sim.invoices[-1]["mv"], sim.invoices[-1]["mt"]) == (264000, 25000)
+
+
+def test_group_n_counted_as_zero_vat_is_a_difference(sim, device, journal):
+    """The expectation of dgi_compliance 5.5.1 (group N = 0 VAT) is refused before 38h, nothing normalized."""
+    op = make_op(items=FUEL, totals={"mv": 264000, "mt": 0}, payments=[{"letter": "E", "amount": 264000}])
+    res = ex(device, journal).execute(op)
+    assert res["outcome"] == "rejected" and res["error"]["code"] == "ECART_TOTAUX"
+    assert res["proven_not_normalized"] and not sim.invoices

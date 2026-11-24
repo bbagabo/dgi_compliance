@@ -18,7 +18,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_datetime
 
-from dgi_compliance.edef.calc import HISTORIC_GROUPS, is_reserved_group
+from dgi_compliance.edef.calc import HISTORIC_GROUPS, is_reserved_group, mcf_expected_totals
 from dgi_compliance.edef.mapper import build_invoice_request, homologation_scope_errors, validate_invoice_request
 
 PAYMENT_LETTERS = {"ESPECES": "E", "VIREMENT": "V", "CARTEBANCAIRE": "C", "MOBILEMONEY": "M",
@@ -68,24 +68,9 @@ def _rate(letter):
 
 def compute_totals(items, mode) -> dict:
     """Same arithmetic as the MCF: per group amount, VAT per group (TTC: extracted, HT: added),
-    then MV (TTC total, specific tax included) and MT (VAT total)."""
-    groups = {}
-    ts = 0.0
-    for row in items:
-        g = groups.setdefault(row["tax_group"], {"rate": flt(row["tax_rate"]), "mon": 0.0})
-        g["mon"] = round(g["mon"] + flt(row["amount"]), 2)
-        ts = round(ts + flt(row.get("ts_total") or 0), 2)
-    mv = mt = 0.0
-    for g in groups.values():
-        r = g["rate"]
-        if mode == "TTC":
-            vat = round(g["mon"] * r / (100.0 + r), 2) if r else 0.0
-            mv = round(mv + g["mon"], 2)
-        else:
-            vat = round(g["mon"] * r / 100.0, 2) if r else 0.0
-            mv = round(mv + g["mon"] + vat, 2)
-        mt = round(mt + vat, 2)
-    return {"mv": round(mv + ts, 2), "mt": mt, "ts": ts}
+    then MV (TTC total, specific tax included) and MT (VAT total). Group N is entirely VAT (SFE 1.5.8,
+    v5.5.2): see edef.calc.mcf_expected_totals."""
+    return mcf_expected_totals(items, mode)
 
 
 def build_mcf_invoice(doc, settings, route) -> tuple[dict, dict]:

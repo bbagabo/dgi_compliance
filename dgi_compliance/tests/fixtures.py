@@ -53,6 +53,10 @@ ITEM_TAX = {
     "DGI D Derogatoire": ("D", {"16": 0}),
     "DGI E Export": ("E", {"16": 0}),
     "DGI S Hors champ": ("S", {"16": 0}),
+    # v5.5.2: prelevement sur ventes, vente reglementee and its TVA specifique (no ERPNext VAT on these lines)
+    "DGI L Prelevement": ("L", {"16": 0}),
+    "DGI M Reglemente": ("M", {"16": 0}),
+    "DGI N TVA specifique": ("N", {"16": 0}),
 }
 
 ITEMS = [
@@ -71,6 +75,10 @@ ITEMS = [
     # v5.5.0 (specifications v2): group R and an item hors champ mapped directly to S
     ("DGI-R-MARCHE", "Fourniture marche public (8 %)", "DGI R 8", 0, "SER", None, 0),
     ("DGI-S-HC", "Frais hors champ TVA", "DGI S Hors champ", 0, "SER", None, 1),
+    # v5.5.2: groups L, M and N (DGI table "Types d'article": TAX only in L and N)
+    ("DGI-M-ESSENCE", "Essence super (litre)", "DGI M Reglemente", 1, "BIE", None, 0),
+    ("DGI-N-TVA-ESS", "TVA specifique essence (litre)", "DGI N TVA specifique", 0, "TAX", None, 0),
+    ("DGI-L-ACCISE", "Droit d'accise (prelevement sur ventes)", "DGI L Prelevement", 0, "TAX", None, 0),
 ]
 
 CUSTOMERS = [

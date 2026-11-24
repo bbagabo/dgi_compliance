@@ -13,7 +13,7 @@ import frappe
 from frappe.utils import flt, formatdate, format_time, format_datetime, strip_html
 
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
-from dgi_compliance.edef.calc import compute_totals, response_groups, round2
+from dgi_compliance.edef.calc import VAT_ONLY_GROUPS, commercial_tax_table, compute_totals, response_groups, round2
 from dgi_compliance.edef.words import amount_in_words_cdf
 
 TITLES = {
@@ -260,29 +260,18 @@ def fiscal_cdf(doc, settings):
 
 def _commercial_tax_table(doc, lines):
     """Per-group VAT in the invoice currency, allocated from the ERPNext tax total so that the
-    table always adds up to the printed 'Total TVA'."""
-    groups = {}
-    for ln in lines:
-        groups.setdefault(ln["group"], {"group": ln["group"], "label": ln["group_label"],
-                                        "rate": flt(ln["rate"]), "ht": 0.0, "vat": 0.0})
-    net_by_group = {}
-    for it, ln in zip(doc.get("items") or [], lines):
-        net_by_group[ln["group"]] = net_by_group.get(ln["group"], 0.0) + abs(flt(it.get("net_amount")))
-    total_vat = abs(flt(doc.get("total_taxes_and_charges")))
-    weights = {g: net_by_group.get(g, 0.0) * flt(v["rate"]) for g, v in groups.items()}
-    wsum = sum(weights.values())
-    allocated = 0.0
-    keys = sorted(groups)
-    for i, g in enumerate(keys):
-        groups[g]["ht"] = round2(net_by_group.get(g, 0.0))
-        if wsum:
-            vat = round2(total_vat - allocated) if i == len(keys) - 1 else round2(total_vat * weights[g] / wsum)
-        else:
-            vat = 0.0
-        allocated += vat
-        groups[g]["vat"] = vat
-        groups[g]["total"] = round2(groups[g]["ht"] + vat)
-    return [groups[g] for g in keys]
+    table always adds up to the printed 'Total TVA'. v5.5.2: group N lines (TVA specifique) are VAT."""
+    rows = [{"group": ln["group"], "label": ln["group_label"], "rate": flt(ln["rate"]),
+             "net": abs(flt(it.get("net_amount")))}
+            for it, ln in zip(doc.get("items") or [], lines)]
+    return commercial_tax_table(rows, abs(flt(doc.get("total_taxes_and_charges"))))
+
+
+def _vat_only_amount(doc, lines, field="net_amount"):
+    """Amount of the group N lines (TVA specifique, SFE 1.5.8). ERPNext records them as items, outside
+    its tax total: they must be added to the printed VAT."""
+    return round2(sum(abs(flt(it.get(field))) for it, ln in zip(doc.get("items") or [], lines)
+                      if ln.get("group") in VAT_ONLY_GROUPS))
 
 
 def totals_block(doc, settings, lines, fiscal):
@@ -291,7 +280,7 @@ def totals_block(doc, settings, lines, fiscal):
     discount_doc = abs(flt(doc.get("discount_amount")))
     if foreign:
         ttc = abs(flt(doc.get("grand_total")))
-        vat = abs(flt(doc.get("total_taxes_and_charges")))
+        vat = round2(abs(flt(doc.get("total_taxes_and_charges"))) + _vat_only_amount(doc, lines))
         ts = round2(sum(ln["ts_amount"] for ln in lines))
         table = _commercial_tax_table(doc, lines)
     else:
@@ -360,7 +349,8 @@ def dgi_invoice_context(doc):
     from dgi_compliance.edef.mapper import _cur_rate
     cur_rate = flt(_cur_rate(doc)) if foreign else 1.0
     cdf_ttc = fiscal["total"] if fiscal["source"] == "e-MCF" else abs(flt(doc.get("base_grand_total")))
-    cdf_vat = fiscal["vtotal"] if fiscal["source"] == "e-MCF" else abs(flt(doc.get("base_total_taxes_and_charges")))
+    cdf_vat = fiscal["vtotal"] if fiscal["source"] == "e-MCF" else round2(
+        abs(flt(doc.get("base_total_taxes_and_charges"))) + _vat_only_amount(doc, lines, "base_net_amount"))
 
     credit = None
     if itype in ("FA", "EA"):

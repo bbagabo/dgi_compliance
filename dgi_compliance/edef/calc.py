@@ -19,6 +19,9 @@ groups Q-Z read from trq..trz (the field 'ts' is the specific tax, not the rate 
 from decimal import Decimal, ROUND_HALF_UP, ROUND_CEILING
 
 VAT_ONLY_GROUPS = ("N",)  # SFE 1.5.8
+# DGI "Types d'article" table (annex of the SFE specifications, SFE 1.1.16): items of type TAX only in
+# groups L (prelevements sur ventes) and N (TVA specifique); BIE and SER items in every group but L and N.
+TAX_ITEM_GROUPS = ("L", "N")
 
 
 def _d(value) -> Decimal:
@@ -91,6 +94,87 @@ def group_amounts(total_or_base, rate, mode, group=None):
         return amount, round2(amount - vat), vat
     vat = ceil2(float(_d(amount) * _d(r) / _d(100)))
     return round2(amount + vat), amount, vat
+
+
+def item_type_group_error(item_type, group):
+    """DGI table "Types d'article": None when the item type may be recorded in the group, else the reason.
+    TAX (taxes et redevances) only in L and N; BIE and SER never in L or N."""
+    t = str(item_type or "").strip().upper()
+    g = str(group or "").strip().upper()
+    if not t or not g:
+        return None
+    if t == "TAX" and g not in TAX_ITEM_GROUPS:
+        return ("article de type TAX dans le groupe {0} : le type TAX est reserve aux groupes L (prelevements "
+                "sur ventes) et N (TVA specifique)").format(g)
+    if t in ("BIE", "SER") and g in TAX_ITEM_GROUPS:
+        return ("article de type {0} dans le groupe {1} : les groupes L et N n'acceptent que des articles de "
+                "type TAX (taxes et redevances)").format(t, g)
+    return None
+
+
+def mcf_expected_totals(items, mode):
+    """Figures the MCF must give at 33h for the items sent with 31h: MV (total with VAT and specific tax),
+    MT (VAT total) and TS. items: rows with tax_group, tax_rate, amount (MON) and optional ts_total.
+    TTC: VAT extracted from the group amount; HT: VAT added. SFE 1.5.8: the amount of group N is
+    entirely VAT, in both modes (v5.5.2; until v5.5.1 group N counted as 0 VAT and the MCF subtotal
+    was refused as a difference)."""
+    mode = (mode or "TTC").upper()
+    groups = {}
+    ts = 0.0
+    for row in items or []:
+        letter = str(row.get("tax_group") or "").upper()
+        g = groups.setdefault(letter, {"rate": float(row.get("tax_rate") or 0), "mon": 0.0})
+        g["mon"] = round(g["mon"] + float(row.get("amount") or 0), 2)
+        ts = round(ts + float(row.get("ts_total") or 0), 2)
+    mv = mt = 0.0
+    for letter, g in groups.items():
+        r = g["rate"]
+        if letter in VAT_ONLY_GROUPS:
+            vat = g["mon"]
+            mv = round(mv + g["mon"], 2)
+        elif mode == "TTC":
+            vat = round(g["mon"] * r / (100.0 + r), 2) if r else 0.0
+            mv = round(mv + g["mon"], 2)
+        else:
+            vat = round(g["mon"] * r / 100.0, 2) if r else 0.0
+            mv = round(mv + g["mon"] + vat, 2)
+        mt = round(mt + vat, 2)
+    return {"mv": round(mv + ts, 2), "mt": mt, "ts": ts}
+
+
+def commercial_tax_table(rows, total_vat):
+    """Per-group VAT table in the INVOICE currency (foreign-currency invoices).
+
+    rows: one dict per invoice line {group, label, rate, net} (net = ERPNext net amount of the line).
+    total_vat: ERPNext tax total, allocated to the VAT groups in proportion to net x rate, so that the
+    table adds up to the ERPNext taxes. Group N lines are recorded by ERPNext as items, outside its tax
+    total: their whole amount is VAT (SFE 1.5.8), so they are printed as VAT, never as HT (v5.5.2)."""
+    groups, net_by_group = {}, {}
+    for ln in rows or []:
+        g = ln["group"]
+        groups.setdefault(g, {"group": g, "label": ln.get("label") or g, "rate": float(ln.get("rate") or 0),
+                              "ht": 0.0, "vat": 0.0})
+        net_by_group[g] = net_by_group.get(g, 0.0) + abs(float(ln.get("net") or 0))
+    keys = sorted(groups)
+    shared = [g for g in keys if g not in VAT_ONLY_GROUPS]
+    weights = {g: net_by_group.get(g, 0.0) * groups[g]["rate"] for g in shared}
+    wsum = sum(weights.values())
+    total_vat = abs(float(total_vat or 0))
+    allocated = 0.0
+    for i, g in enumerate(shared):
+        groups[g]["ht"] = round2(net_by_group.get(g, 0.0))
+        if wsum:
+            vat = round2(total_vat - allocated) if i == len(shared) - 1 else round2(total_vat * weights[g] / wsum)
+        else:
+            vat = 0.0
+        allocated += vat
+        groups[g]["vat"] = vat
+        groups[g]["total"] = round2(groups[g]["ht"] + vat)
+    for g in keys:
+        if g in VAT_ONLY_GROUPS:
+            amount = round2(net_by_group.get(g, 0.0))
+            groups[g].update({"ht": 0.0, "vat": amount, "total": amount})
+    return [groups[g] for g in keys]
 
 
 def compute_totals(items, mode, rates):

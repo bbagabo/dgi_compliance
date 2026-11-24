@@ -30,6 +30,7 @@ from frappe.utils import flt, get_datetime
 from dgi_compliance.dgi_compliance.doctype.dgi_compliance_settings.dgi_compliance_settings import get_settings
 from dgi_compliance.edef.calc import (
     APPLICABLE_GROUPS, GROUP_LETTERS, HORS_CHAMP_GROUP, VAT_ONLY_GROUPS, compute_totals, is_reserved_group,
+    item_type_group_error,
     parse_specific_tax, reserved_label, round2, round3, split_specific_tax,
 )
 from dgi_compliance.edef.payments import PaymentTypeMappingError, align_to_fiscal_total, resolve_payment_lines
@@ -446,6 +447,9 @@ def validate_invoice_request(dto):
         elif it.get("taxGroup") not in APPLICABLE_TAX_GROUPS:
             errors.append(f"ligne {i}: groupe {it.get('taxGroup')} reserve ({reserved_label(it.get('taxGroup'))}), "
                           "aucun article ne peut y etre enregistre (groupes applicables A a S)")
+        type_error = item_type_group_error(it.get("type"), it.get("taxGroup"))
+        if type_error:
+            errors.append(f"ligne {i}: {type_error} (tableau DGI 'Types d'article')")
         if not (flt(it.get("price")) > 0):
             errors.append(f"ligne {i}: prix nul ou negatif interdit (SFE 1.1.22)")
         if not (flt(it.get("quantity")) > 0):

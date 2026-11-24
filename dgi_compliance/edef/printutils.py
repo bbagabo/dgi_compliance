@@ -155,9 +155,11 @@ def dgi_invoice_lines(doc):
     return out
 
 
-def _gross_total(doc, base=False):
+def _gross_total(doc, base=False, skip=()):
     total = 0.0
     for it in (doc.get("items") or []):
+        if it.get("idx") in skip:
+            continue
         qty = abs(flt(it.get("qty")))
         if base:
             unit = abs(flt(it.get("base_price_list_rate"))) or abs(flt(it.get("base_rate")))
@@ -167,22 +169,38 @@ def _gross_total(doc, base=False):
     return total
 
 
+def _vat_only_lines(doc):
+    """idx of the group N lines: TVA specifique, entirely VAT (SFE 1.5.8), recorded by ERPNext as items
+    outside its tax total (v5.5.2)."""
+    from dgi_compliance.edef.calc import VAT_ONLY_GROUPS
+    try:
+        settings = get_settings()
+        from dgi_compliance.edef.matrix import resolve_tax_group
+        return {it.get("idx") for it in (doc.get("items") or [])
+                if resolve_tax_group(it, settings, doc) in VAT_ONLY_GROUPS}
+    except Exception:
+        return set()
+
+
 def dgi_totals(doc):
     """Totals block: montant_facture (HT brut), remise, tva, net_a_payer (TTC).
     Net a payer = base_grand_total (authoritative). Remise = Montant facture - (Net a payer - TVA),
     which captures both line and document-level discounts. *_cdf = CDF values sent to the DGI."""
-    tva = abs(flt(doc.get("total_taxes_and_charges")))
+    n_lines = _vat_only_lines(doc)
+    n_items = [it for it in (doc.get("items") or []) if it.get("idx") in n_lines]
+    tva = abs(flt(doc.get("total_taxes_and_charges"))) + sum(abs(flt(it.get("net_amount"))) for it in n_items)
     net_a_payer = abs(flt(doc.get("grand_total")))
     taxable_net = net_a_payer - tva
-    montant_facture = _gross_total(doc, base=False)
+    montant_facture = _gross_total(doc, base=False, skip=n_lines)
     if montant_facture < taxable_net:
         montant_facture = taxable_net  # safety (no negative discount)
     remise = montant_facture - taxable_net
 
-    tva_cdf = abs(flt(doc.get("base_total_taxes_and_charges")))
+    tva_cdf = abs(flt(doc.get("base_total_taxes_and_charges"))) + sum(abs(flt(it.get("base_net_amount")))
+                                                                      for it in n_items)
     net_a_payer_cdf = abs(flt(doc.get("base_grand_total")))
     taxable_net_cdf = net_a_payer_cdf - tva_cdf
-    montant_facture_cdf = _gross_total(doc, base=True)
+    montant_facture_cdf = _gross_total(doc, base=True, skip=n_lines)
     if montant_facture_cdf < taxable_net_cdf:
         montant_facture_cdf = taxable_net_cdf
     remise_cdf = montant_facture_cdf - taxable_net_cdf
@@ -203,6 +221,7 @@ def dgi_tax_summary(doc):
     except Exception:
         return []
     from dgi_compliance.edef.matrix import resolve_tax_group
+    from dgi_compliance.edef.calc import VAT_ONLY_GROUPS
     groups = {}
     for it in (doc.get("items") or []):
         tg = resolve_tax_group(it, settings, doc)
@@ -214,7 +233,7 @@ def dgi_tax_summary(doc):
         if frappe.db.exists("DGI Tax Group", tg):
             rate = flt(frappe.db.get_value("DGI Tax Group", tg, "rate"))
         g["rate"] = rate
-        g["vat"] = flt(g["base"] * rate / 100.0)
+        g["vat"] = flt(g["base"]) if tg in VAT_ONLY_GROUPS else flt(g["base"] * rate / 100.0)
     return [groups[k] for k in sorted(groups)]
 
 
