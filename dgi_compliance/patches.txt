@@ -20,3 +20,4 @@ dgi_compliance.patches.v5_4.sequence_pdv
 dgi_compliance.patches.v5_4.rapports_par_pdv
 dgi_compliance.patches.v5_4.operateur_mcf
 dgi_compliance.patches.v5_5.specifications_v2
+dgi_compliance.patches.v5_5.avoirs_lignes_tax

@@ -214,9 +214,12 @@ def seed_customer_type_mapping(force: bool = False) -> dict:
 MATRIX_D_ROWS = [("All", "Any", "Allow")]
 
 # Matrix E: (invoice_type, item_type, status)
+# v5.5.2: a credit note (FA/EA) may carry TAX lines (groups L and N): it repeats the lines of the original
+# invoice, and Matrix F already allows RRR x TAX. Until v5.5.1 "FA/EA x TAX = Blocked" made it impossible to
+# cancel or credit an invoice with a prelevement sur ventes (L) or a TVA specifique (N).
 MATRIX_E_ROWS = [
-    ("FA", "BIE", "Allow"), ("FA", "SER", "Allow"), ("FA", "TAX", "Blocked"),
-    ("EA", "BIE", "Allow"), ("EA", "SER", "Allow"), ("EA", "TAX", "Blocked"),
+    ("FA", "BIE", "Allow"), ("FA", "SER", "Allow"), ("FA", "TAX", "Allow"),
+    ("EA", "BIE", "Allow"), ("EA", "SER", "Allow"), ("EA", "TAX", "Allow"),
 ]
 
 # Matrix F: (credit_nature, item_type, status)
